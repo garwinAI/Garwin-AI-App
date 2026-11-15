@@ -1,0 +1,27 @@
+{
+  "name": "garwinai/platform",
+  "description": "Garwin AI platform foundation",
+  "license": "proprietary",
+  "type": "project",
+  "require": {
+    "php": "^8.2",
+    "ext-pdo": "*",
+    "ext-mbstring": "*",
+    "ext-session": "*",
+    "ext-curl": "*",
+    "ext-openssl": "*",
+    "ext-simplexml": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "app/"
+    },
+    "files": [
+      "app/helpers.php"
+    ]
+  },
+  "scripts": {
+    "migrate": "php bin/console migrate",
+    "test": "php tests/run.php"
+  }
+}
