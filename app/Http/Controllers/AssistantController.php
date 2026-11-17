@@ -152,6 +152,9 @@ final class AssistantController
         $user = $this->requireWorkspaceUser();
         $token = $_POST['_token'] ?? null;
         if (!Csrf::isValid(is_string($token) ? $token : null)) {
+            if ($this->wantsJson()) {
+                $this->json(['error' => 'Your session expired. Refresh the page and try again.'], 419);
+            }
             http_response_code(419);
             render('error', ['title' => 'Request expired', 'message' => 'Refresh the page and try again.'], 419);
             return;
@@ -181,6 +184,9 @@ final class AssistantController
             );
             $ownerStatement->execute(['id' => $conversationId, 'user_id' => $user['id']]);
             if ($ownerStatement->fetchColumn() === false) {
+                if ($this->wantsJson()) {
+                    $this->json(['error' => 'That conversation is not available.'], 404);
+                }
                 set_flash_message('error', 'That conversation is not available.');
                 redirect('/assistant');
             }
@@ -205,6 +211,9 @@ final class AssistantController
         try {
             $reply = $service->reply($history, $prompt);
         } catch (\InvalidArgumentException|RuntimeException $exception) {
+            if ($this->wantsJson()) {
+                $this->json(['error' => $exception->getMessage()], 422);
+            }
             set_flash_message('error', $exception->getMessage());
             redirect($conversationId === null ? '/assistant' : '/assistant?conversation=' . $conversationId);
         }
@@ -259,25 +268,90 @@ final class AssistantController
             throw $exception;
         }
 
+        if ($this->wantsJson()) {
+            $this->json([
+                'conversation_id' => $conversationId,
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt],
+                    ['role' => 'assistant', 'content' => $reply],
+                ],
+            ]);
+        }
+
         redirect('/assistant?conversation=' . $conversationId);
+    }
+
+    /** JSON history for the chat window: GET /assistant/messages?conversation=ID */
+    public function messages(): void
+    {
+        $user = $this->requireWorkspaceUser(json: true);
+        $conversationId = filter_var($_GET['conversation'] ?? '', FILTER_VALIDATE_INT);
+        if ($conversationId === false || $conversationId < 1) {
+            $this->json(['error' => 'Choose a conversation.'], 422);
+        }
+
+        $pdo = app_db();
+        $conversationStatement = $pdo->prepare(
+            'SELECT id, title FROM ai_conversations WHERE id = :id AND user_id = :user_id'
+        );
+        $conversationStatement->execute(['id' => $conversationId, 'user_id' => $user['id']]);
+        $conversation = $conversationStatement->fetch(PDO::FETCH_ASSOC);
+        if ($conversation === false) {
+            $this->json(['error' => 'That conversation is not available.'], 404);
+        }
+
+        $messageStatement = $pdo->prepare(
+            'SELECT role, content FROM ai_messages WHERE conversation_id = :conversation_id ORDER BY id'
+        );
+        $messageStatement->execute(['conversation_id' => $conversationId]);
+
+        $this->json([
+            'conversation_id' => (int) $conversation['id'],
+            'title' => $conversation['title'],
+            'messages' => $messageStatement->fetchAll(PDO::FETCH_ASSOC),
+        ]);
     }
 
     private function invalidPrompt(): never
     {
+        if ($this->wantsJson()) {
+            $this->json(['error' => 'Enter a message of up to 4,000 characters and try again.'], 422);
+        }
         set_flash_message('error', 'Enter a message of up to 4,000 characters and try again.');
         redirect('/assistant');
     }
 
-    private function requireWorkspaceUser(): array
+    private function requireWorkspaceUser(bool $json = false): array
     {
+        $json = $json || $this->wantsJson();
         $user = current_user();
         if ($user === null) {
+            if ($json) {
+                $this->json(['error' => 'Please log in again.'], 401);
+            }
             redirect('/login');
         }
         if ($user['is_admin']) {
+            if ($json) {
+                $this->json(['error' => 'The AI Assistant is available in user workspaces.'], 403);
+            }
             redirect('/admin');
         }
 
         return $user;
+    }
+
+    private function wantsJson(): bool
+    {
+        return str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    }
+
+    private function json(array $payload, int $status = 200): never
+    {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     }
 }

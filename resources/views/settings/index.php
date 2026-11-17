@@ -6,6 +6,8 @@
     </div>
 </section>
 
+<?php $settingsTab = 'preferences'; require dirname(__DIR__) . '/partials/settings-tabs.php'; ?>
+
 <?php if ($flashMessage !== null): ?>
     <div class="admin-alert <?= e($flashMessage['type']) ?>" role="status"><?= e($flashMessage['message']) ?></div>
 <?php endif; ?>

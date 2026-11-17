@@ -1,11 +1,13 @@
 <section class="page-heading">
     <div>
-        <p class="eyebrow">ACCOUNT</p>
-        <h1>Billing &amp; membership</h1>
+        <p class="eyebrow">YOUR WORKSPACE</p>
+        <h1>Settings</h1>
         <p class="page-subtitle">Review your plan, limits, and subscription status.</p>
     </div>
     <span class="plan-pill"><span class="status-dot"></span><?= e(ucfirst($membership['plan_key'])) ?> plan</span>
 </section>
+
+<?php $settingsTab = 'billing'; require dirname(__DIR__) . '/partials/settings-tabs.php'; ?>
 
 <?php if ($flashMessage !== null): ?>
     <div class="admin-alert <?= e($flashMessage['type']) ?>" role="status"><?= e($flashMessage['message']) ?></div>

@@ -108,6 +108,7 @@ assertTrue(
         '007_create_billing.php',
         '008_create_appzone_checkout.php',
         '009_seed_developer_app.php',
+        '010_create_spreadsheets_and_codebase.php',
     ],
     'Foundation, admin, and workspace migrations must apply.'
 );
@@ -769,5 +770,23 @@ putenv('APP_KEY');
 putenv('APP_URL');
 putenv('SESSION_SECURE_COOKIE');
 putenv('APP_DEBUG');
+
+assertTrue(
+    array_keys(App\Support\BuiltInApps::forPlan('free')) === ['media', 'documents'],
+    'Free plans must include only Media Viewer and Document Viewer.'
+);
+assertTrue(
+    array_keys(App\Support\BuiltInApps::forPlan('pro')) === ['wordbase', 'spreadsheets', 'codebase', 'media', 'documents'],
+    'Paid plans must include all default apps.'
+);
+assertTrue(
+    !App\Support\BuiltInApps::isAvailable('spreadsheets', 'free') && App\Support\BuiltInApps::isAvailable('documents', 'free'),
+    'Paid-only apps must be unavailable on the free plan.'
+);
+assertTrue(
+    App\Http\Controllers\CodebaseController::languageFor('index.PHP') === 'PHP'
+        && App\Http\Controllers\CodebaseController::languageFor('notes') === 'Plain text',
+    'Codebase must detect languages from file extensions.'
+);
 
 fwrite(STDOUT, "All foundation tests passed.\n");
