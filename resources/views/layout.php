@@ -12,21 +12,37 @@
 <body>
 <?php
 $currentPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
-$pinnedApps = [];
+$installedApps = [];
+$storageDrive = null;
 if ($user !== null && !$user['is_admin']) {
     try {
-        $pinnedStatement = app_db()->prepare(
+        $appsStatement = app_db()->prepare(
             'SELECT i.name, i.launch_url
              FROM appzone_installs x JOIN appzone_items i ON i.id = x.app_id
              WHERE x.user_id = :user_id AND i.is_published = 1
-             ORDER BY x.installed_at, x.id LIMIT 5'
+             ORDER BY x.installed_at, x.id'
         );
-        $pinnedStatement->execute(['user_id' => $user['id']]);
-        $pinnedApps = $pinnedStatement->fetchAll(PDO::FETCH_ASSOC);
+        $appsStatement->execute(['user_id' => $user['id']]);
+        $installedApps = $appsStatement->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException) {
-        $pinnedApps = [];
+        $installedApps = [];
+    }
+    try {
+        $driveStatement = app_db()->prepare('SELECT storage_key FROM storage_accounts WHERE user_id = :user_id');
+        $driveStatement->execute(['user_id' => $user['id']]);
+        $storageDrive = $driveStatement->fetchColumn() ?: null;
+    } catch (PDOException) {
+        $storageDrive = null;
     }
 }
+$pinnedApps = array_slice($installedApps, 0, 5);
+$appPaths = array_values(array_filter(array_map(
+    static fn (array $app): string => (string) parse_url((string) $app['launch_url'], PHP_URL_PATH),
+    $installedApps
+), static fn (string $path): bool => str_starts_with($path, '/')
+    && !in_array($path, ['/dashboard', '/assistant', '/messages', '/calendar', '/storage', '/settings', '/billing'], true)));
+$navActive = static fn (string ...$paths): bool => in_array($currentPath, $paths, true);
+$navAttrs = static fn (bool $active): string => $active ? 'class="nav-link active" aria-current="page"' : 'class="nav-link"';
 ?>
 <?php if ($user !== null): ?>
     <div class="app-frame">
@@ -77,17 +93,66 @@ if ($user !== null && !$user['is_admin']) {
                 <a class="nav-link" href="/admin/settings?tab=demo-users">Demo Users</a>
                 <a class="nav-link <?= $currentPath === '/admin/appzone' ? 'active' : '' ?>" href="/admin/appzone" <?= $currentPath === '/admin/appzone' ? 'aria-current="page"' : '' ?>>AppZone catalog</a>
             <?php else: ?>
-                <p class="nav-label">WORKSPACE</p>
-                <a class="nav-link <?= $currentPath === '/dashboard' ? 'active' : '' ?>" href="/dashboard" <?= $currentPath === '/dashboard' ? 'aria-current="page"' : '' ?>>Dashboard</a>
-                <a class="nav-link <?= $currentPath === '/assistant' ? 'active' : '' ?>" href="/assistant" <?= $currentPath === '/assistant' ? 'aria-current="page"' : 'data-assistant-open' ?>>AI Assistant</a>
-                <p class="nav-label">APPS</p>
-                <a class="nav-link <?= $currentPath === '/appzone' ? 'active' : '' ?>" href="/appzone" <?= $currentPath === '/appzone' ? 'aria-current="page"' : '' ?>>AppZone</a>
-                <a class="nav-link <?= $currentPath === '/developer' ? 'active' : '' ?>" href="/developer" <?= $currentPath === '/developer' ? 'aria-current="page"' : '' ?>>Developer App</a>
-                <a class="nav-link <?= $currentPath === '/wordbase' ? 'active' : '' ?>" href="/wordbase" <?= $currentPath === '/wordbase' ? 'aria-current="page"' : '' ?>>Wordbase</a>
-                <a class="nav-link <?= $currentPath === '/calendar' ? 'active' : '' ?>" href="/calendar" <?= $currentPath === '/calendar' ? 'aria-current="page"' : '' ?>>Calendar</a>
-                <a class="nav-link <?= $currentPath === '/storage' ? 'active' : '' ?>" href="/storage" <?= $currentPath === '/storage' ? 'aria-current="page"' : '' ?>>Storage</a>
-                <a class="nav-link <?= $currentPath === '/billing' ? 'active' : '' ?>" href="/billing" <?= $currentPath === '/billing' ? 'aria-current="page"' : '' ?>>Billing &amp; membership</a>
-                <a class="nav-link <?= $currentPath === '/settings' ? 'active' : '' ?>" href="/settings" <?= $currentPath === '/settings' ? 'aria-current="page"' : '' ?>>Settings</a>
+                <nav class="sidebar-nav" aria-label="Workspace">
+                    <a <?= $navAttrs($navActive('/dashboard')) ?> href="/dashboard">
+                        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
+                        <span>Dashboard</span>
+                    </a>
+                    <a <?= $navAttrs($navActive('/assistant')) ?> href="/assistant" <?= $navActive('/assistant') ? '' : 'data-assistant-open' ?>>
+                        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></svg>
+                        <span>AI Assistant</span>
+                    </a>
+                    <a <?= $navAttrs($navActive('/messages')) ?> href="/messages">
+                        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4V5.5Z"/><path d="M8 9h8M8 12h5"/></svg>
+                        <span>Messages</span>
+                    </a>
+                    <a <?= $navAttrs($navActive('/calendar')) ?> href="/calendar">
+                        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
+                        <span>Calendar</span>
+                    </a>
+                    <?php $appsActive = $navActive('/appzone', ...$appPaths); ?>
+                    <details class="nav-group" <?= $appsActive ? 'open' : '' ?>>
+                        <summary class="nav-link <?= $appsActive ? 'active' : '' ?>">
+                            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><path d="M17 13.5v7M13.5 17h7"/></svg>
+                            <span>Apps</span>
+                            <svg class="nav-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                        </summary>
+                        <div class="nav-sub">
+                            <?php foreach ($installedApps as $app): ?>
+                                <?php $appPath = (string) parse_url((string) $app['launch_url'], PHP_URL_PATH); $appActive = $appPath === $currentPath && in_array($appPath, $appPaths, true); ?>
+                                <a class="nav-sublink <?= $appActive ? 'active' : '' ?>" href="<?= e($app['launch_url']) ?>" <?= $appActive ? 'aria-current="page"' : '' ?>>
+                                    <span class="nav-app-tile" aria-hidden="true"><?= e(mb_strtoupper(mb_substr($app['name'], 0, 1))) ?></span>
+                                    <span class="nav-sublink-label"><?= e($app['name']) ?></span>
+                                </a>
+                            <?php endforeach; ?>
+                            <?php if ($installedApps === []): ?>
+                                <span class="nav-sub-empty">No apps yet</span>
+                            <?php endif; ?>
+                            <a class="nav-sublink nav-sublink-muted <?= $navActive('/appzone') ? 'active' : '' ?>" href="/appzone" <?= $navActive('/appzone') ? 'aria-current="page"' : '' ?>>
+                                <span class="nav-app-tile is-add" aria-hidden="true">+</span>
+                                <span class="nav-sublink-label">Browse AppZone</span>
+                            </a>
+                        </div>
+                    </details>
+                    <div class="nav-group is-static">
+                        <a <?= $navAttrs($navActive('/storage')) ?> href="/storage">
+                            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10Z"/></svg>
+                            <span>Storage</span>
+                        </a>
+                        <?php if ($storageDrive !== null): ?>
+                            <div class="nav-sub">
+                                <a class="nav-sublink" href="/storage" title="Open drive <?= e($storageDrive) ?>">
+                                    <svg class="nav-drive-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5.5 13 8 5h8l2.5 8"/><path d="M7 16.5h.01M10.5 16.5H17"/></svg>
+                                    <span class="nav-sublink-label nav-drive-name"><?= e($storageDrive) ?></span>
+                                </a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <a <?= $navAttrs($navActive('/settings', '/billing')) ?> href="/settings">
+                        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+                        <span>Settings</span>
+                    </a>
+                </nav>
             <?php endif; ?>
             <div class="sidebar-footer">
                 <span class="avatar"><?= e(mb_strtoupper(mb_substr($user['first_name'], 0, 1))) ?></span>
