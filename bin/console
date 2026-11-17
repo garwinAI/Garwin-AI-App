@@ -1,0 +1,48 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/bootstrap.php';
+
+$command = $argv[1] ?? '';
+$pdo = app_db();
+
+if ($command === 'migrate') {
+    $migrations = (new App\Database\Migrator($pdo))->migrate(dirname(__DIR__) . '/database/migrations');
+    if ($migrations === []) {
+        fwrite(STDOUT, "Database is already up to date.\n");
+        exit(0);
+    }
+    foreach ($migrations as $migration) {
+        fwrite(STDOUT, "Migrated: {$migration}\n");
+    }
+    exit(0);
+}
+
+if ($command === 'key:generate') {
+    fwrite(STDOUT, 'APP_KEY=base64:' . base64_encode(random_bytes(32)) . PHP_EOL);
+    exit(0);
+}
+
+if ($command === 'admin:bootstrap') {
+    $email = App\Support\Env::get('GARWIN_ADMIN_EMAIL', 'support@garwinai.com');
+    $password = App\Support\Env::get('GARWIN_ADMIN_PASSWORD');
+    if ($password === null || $password === '') {
+        fwrite(STDERR, "Set GARWIN_ADMIN_PASSWORD in the ignored .env file before bootstrapping.\n");
+        exit(2);
+    }
+
+    $storage = new App\Services\StorageProvisioner(dirname(__DIR__));
+    $registration = new App\Services\RegistrationService(
+        $pdo,
+        new App\Services\UserIdGenerator($pdo),
+        $storage
+    );
+    $created = (new App\Services\AdminBootstrapService($pdo, $registration))->bootstrap($email, $password);
+    fwrite(STDOUT, $created ? "Super Admin account provisioned.\n" : "Super Admin account is already provisioned.\n");
+    exit(0);
+}
+
+fwrite(STDERR, "Usage: php bin/console migrate|key:generate|admin:bootstrap\n");
+exit(2);
