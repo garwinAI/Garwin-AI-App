@@ -568,3 +568,31 @@ button, input { font: inherit; }
     .panel-heading { align-items: flex-start; flex-direction: column; }
     .panel-heading form { align-items: flex-start; flex-direction: column; }
 }
+
+/* Shared helpers (replace inline styles blocked by the style-src 'self' CSP) */
+.muted { color: var(--muted); font-size: 12px; }
+.inline-form { display: inline; margin: 0; }
+.button-tiny { min-height: 28px; gap: 6px; padding: 0 9px; border-radius: 7px; font-size: 11px; }
+.panel { padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 3px 12px #242e3a06; }
+.calendar-datetime-fields > label { display: flex; flex-direction: column; gap: 6px; color: var(--ink); font-size: 12px; font-weight: 650; }
+
+/* AI Assistant: budget panel and conversation history */
+.budget-panel { margin-bottom: 16px; }
+.budget-panel-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+.budget-panel-row span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.history-search { margin: 0 8px 12px; }
+.history-search input { width: 100%; min-height: 36px; padding: 0 11px; border: 1px solid #d8dce2; border-radius: 8px; background: #fff; color: var(--ink); font-size: 12px; }
+.history-search input:focus-visible, .history-rename input:focus-visible { border-color: var(--blue); outline: 2px solid #246bce33; outline-offset: 0; }
+.history-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.history-item .assistant-history-link { flex: 1; min-width: 0; }
+.history-item .button-tiny { flex-shrink: 0; }
+.history-rename { display: flex; gap: 6px; margin: 0 8px 10px; }
+.history-rename input { flex: 1; min-width: 0; min-height: 28px; padding: 0 8px; border: 1px solid #d8dce2; border-radius: 6px; background: #fff; color: var(--ink); font-size: 11px; }
+
+/* Wordbase editor */
+.wordbase-editor { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.wordbase-title, .wordbase-body { width: 100%; border: 1px solid #d8dce2; background: #fff; color: var(--ink); font: inherit; }
+.wordbase-title { min-height: 46px; padding: 0 14px; border-radius: 10px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.wordbase-body { flex: 1; min-height: 320px; padding: 14px; border-radius: 12px; font-size: 14px; line-height: 1.65; resize: vertical; }
+.wordbase-title:focus-visible, .wordbase-body:focus-visible { border-color: var(--blue); outline: 2px solid #246bce33; outline-offset: 0; }
+.wordbase-editor-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }

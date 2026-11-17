@@ -4,7 +4,7 @@
         <h1>Wordbase</h1>
         <p class="page-subtitle">Draft notes, ideas, and project writing in a private workspace.</p>
     </div>
-    <form method="post" action="/wordbase/save" style="display:inline;">
+    <form class="inline-form" method="post" action="/wordbase/save">
         <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
         <button class="button button-small" type="submit">New document</button>
     </form>
@@ -22,17 +22,16 @@
         <?php else: ?>
             <nav>
                 <?php foreach ($documents as $item): ?>
-                    <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                    <div class="history-item">
                         <a class="assistant-history-link <?= $document !== null && (int) $document['id'] === (int) $item['id'] ? 'active' : '' ?>"
                            href="/wordbase?document=<?= (int) $item['id'] ?>"
-                           <?= $document !== null && (int) $document['id'] === (int) $item['id'] ? 'aria-current="page"' : '' ?>
-                           style="flex:1; min-width:0;">
+                           <?= $document !== null && (int) $document['id'] === (int) $item['id'] ? 'aria-current="page"' : '' ?>>
                             <?= e($item['title']) ?>
                         </a>
-                        <form method="post" action="/wordbase/delete" style="display:inline;">
+                        <form class="inline-form" method="post" action="/wordbase/delete">
                             <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
                             <input type="hidden" name="document_id" value="<?= (int) $item['id'] ?>">
-                            <button type="submit" class="button button-small" style="padding:4px 8px; font-size:11px;">Delete</button>
+                            <button type="submit" class="button button-tiny button-secondary">Delete</button>
                         </form>
                     </div>
                 <?php endforeach; ?>
@@ -48,15 +47,15 @@
                 <p>Create a new document and capture ideas, plans, and notes.</p>
             </div>
         <?php else: ?>
-            <form method="post" action="/wordbase/save" style="display:flex; flex-direction:column; gap:12px;">
+            <form class="wordbase-editor" method="post" action="/wordbase/save">
                 <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
                 <input type="hidden" name="document_id" value="<?= (int) $document['id'] ?>">
                 <label>
                     <span class="sr-only">Document title</span>
-                    <input type="text" name="title" value="<?= e($document['title']) ?>" maxlength="255" style="width:100%; padding:12px 14px; border:1px solid #d8dce2; border-radius:10px; font-size:1.05rem;" placeholder="Untitled document">
+                    <input type="text" name="title" value="<?= e($document['title']) ?>" maxlength="255" class="wordbase-title" placeholder="Untitled document">
                 </label>
-                <textarea name="content" rows="18" style="width:100%; min-height:320px; resize:vertical; padding:14px; border:1px solid #d8dce2; border-radius:12px; font:inherit; line-height:1.6;" placeholder="Write something meaningful…"><?= e($document['content']) ?></textarea>
-                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                <textarea class="wordbase-body" name="content" rows="18" placeholder="Write something meaningful…"><?= e($document['content']) ?></textarea>
+                <div class="wordbase-editor-footer">
                     <span class="muted">Last updated: <?= e($document['updated_at']) ?></span>
                     <button class="button" type="submit">Save changes</button>
                 </div>
