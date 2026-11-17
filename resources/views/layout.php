@@ -35,12 +35,15 @@ if ($user !== null && !$user['is_admin']) {
         $storageDrive = null;
     }
 }
+$planKey = $user !== null && !$user['is_admin'] ? App\Support\BuiltInApps::planKeyFor((int) $user['id']) : App\Support\BuiltInApps::FREE_PLAN;
+$defaultApps = App\Support\BuiltInApps::forPlan($planKey);
 $pinnedApps = array_slice($installedApps, 0, 5);
 $appPaths = array_values(array_filter(array_map(
     static fn (array $app): string => (string) parse_url((string) $app['launch_url'], PHP_URL_PATH),
     $installedApps
 ), static fn (string $path): bool => str_starts_with($path, '/')
     && !in_array($path, ['/dashboard', '/assistant', '/messages', '/calendar', '/storage', '/settings', '/billing'], true)));
+$appPaths = [...$appPaths, ...array_values(array_map(static fn (array $app): string => $app['path'], $defaultApps))];
 $navActive = static fn (string ...$paths): bool => in_array($currentPath, $paths, true);
 $navAttrs = static fn (bool $active): string => $active ? 'class="nav-link active" aria-current="page"' : 'class="nav-link"';
 ?>
@@ -61,9 +64,11 @@ $navAttrs = static fn (bool $active): string => $active ? 'class="nav-link activ
                 <a class="workspace-shortcut <?= $currentPath === '/assistant' ? 'active' : '' ?>" href="/assistant" aria-label="AI Assistant" title="AI Assistant" <?= $currentPath === '/assistant' ? 'aria-current="page"' : 'data-assistant-open' ?>>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></svg>
                 </a>
+                <?php if (isset($defaultApps['wordbase'])): ?>
                 <a class="workspace-shortcut <?= $currentPath === '/wordbase' ? 'active' : '' ?>" href="/wordbase" aria-label="Wordbase" title="Wordbase" <?= $currentPath === '/wordbase' ? 'aria-current="page"' : '' ?>>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Zm0 3h14M8 12h8M8 8h4"/></svg>
                 </a>
+                <?php endif; ?>
                 <a class="workspace-shortcut <?= $currentPath === '/storage' ? 'active' : '' ?>" href="/storage" aria-label="Storage" title="Storage" <?= $currentPath === '/storage' ? 'aria-current="page"' : '' ?>>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v5H4zM4 12h16v7H4z"/><path d="M8 7.5h.01M8 15.5h.01"/></svg>
                 </a>
@@ -117,20 +122,24 @@ $navAttrs = static fn (bool $active): string => $active ? 'class="nav-link activ
                             <span>Apps</span>
                             <svg class="nav-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
                         </summary>
-                        <div class="nav-sub">
-                            <?php foreach ($installedApps as $app): ?>
-                                <?php $appPath = (string) parse_url((string) $app['launch_url'], PHP_URL_PATH); $appActive = $appPath === $currentPath && in_array($appPath, $appPaths, true); ?>
-                                <a class="nav-sublink <?= $appActive ? 'active' : '' ?>" href="<?= e($app['launch_url']) ?>" <?= $appActive ? 'aria-current="page"' : '' ?>>
-                                    <span class="nav-app-tile" aria-hidden="true"><?= e(mb_strtoupper(mb_substr($app['name'], 0, 1))) ?></span>
-                                    <span class="nav-sublink-label"><?= e($app['name']) ?></span>
+                        <div class="nav-sub nav-app-grid">
+                            <?php foreach ($defaultApps as $appKey => $defaultApp): ?>
+                                <?php $tileActive = $currentPath === $defaultApp['path']; ?>
+                                <a class="app-thumb <?= $tileActive ? 'active' : '' ?>" href="<?= e($defaultApp['path']) ?>" title="<?= e($defaultApp['name']) ?>" <?= $tileActive ? 'aria-current="page"' : '' ?>>
+                                    <?php $iconKey = $appKey; $iconSize = ''; require __DIR__ . '/partials/app-icon.php'; ?>
+                                    <span class="app-thumb-label"><?= e($defaultApp['name']) ?></span>
                                 </a>
                             <?php endforeach; ?>
-                            <?php if ($installedApps === []): ?>
-                                <span class="nav-sub-empty">No apps yet</span>
-                            <?php endif; ?>
-                            <a class="nav-sublink nav-sublink-muted <?= $navActive('/appzone') ? 'active' : '' ?>" href="/appzone" <?= $navActive('/appzone') ? 'aria-current="page"' : '' ?>>
-                                <span class="nav-app-tile is-add" aria-hidden="true">+</span>
-                                <span class="nav-sublink-label">Browse AppZone</span>
+                            <?php foreach ($installedApps as $app): ?>
+                                <?php $appPath = (string) parse_url((string) $app['launch_url'], PHP_URL_PATH); $appActive = $appPath === $currentPath && in_array($appPath, $appPaths, true); ?>
+                                <a class="app-thumb <?= $appActive ? 'active' : '' ?>" href="<?= e($app['launch_url']) ?>" title="<?= e($app['name']) ?>" <?= $appActive ? 'aria-current="page"' : '' ?>>
+                                    <span class="app-icon tone-blue" aria-hidden="true"><b><?= e(mb_strtoupper(mb_substr($app['name'], 0, 1))) ?></b></span>
+                                    <span class="app-thumb-label"><?= e($app['name']) ?></span>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="app-thumb <?= $navActive('/appzone') ? 'active' : '' ?>" href="/appzone" title="Browse AppZone" <?= $navActive('/appzone') ? 'aria-current="page"' : '' ?>>
+                                <span class="app-icon is-add" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                                <span class="app-thumb-label">AppZone</span>
                             </a>
                         </div>
                     </details>

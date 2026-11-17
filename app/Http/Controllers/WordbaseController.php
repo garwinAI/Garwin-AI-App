@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Support\BuiltInApps;
 use App\Support\Csrf;
 use PDO;
 use PDOException;
@@ -157,14 +158,6 @@ final class WordbaseController
 
     private function requireWorkspaceUser(): array
     {
-        $user = current_user();
-        if ($user === null) {
-            redirect('/login');
-        }
-        if ($user['is_admin']) {
-            redirect('/admin');
-        }
-
-        return $user;
+        return BuiltInApps::requireAccess('wordbase');
     }
 }
