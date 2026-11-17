@@ -4,8 +4,8 @@
         <h1>Your work, <span>in one intelligent workspace.</span></h1>
         <p>Bring your projects and AI conversations together in a secure workspace designed to grow with you.</p>
         <div class="hero-actions">
-            <a class="button" href="/register">Create your free account <span aria-hidden="true">→</span></a>
-            <a class="text-link" href="/login">Already a member? Sign in</a>
+            <?php $getStartedSize = ''; $getStartedClass = 'menu-start'; require __DIR__ . '/partials/get-started.php'; ?>
+            <a class="text-link" href="/login">Already a member? Log in</a>
         </div>
         <div class="hero-footnote"><span class="check-mark">✓</span> Free to get started <span class="footnote-divider"></span> Your account, your workspace</div>
     </div>
@@ -159,5 +159,5 @@
         <p class="eyebrow">READY TO BUILD?</p>
         <h2>Bring your ideas into a workspace built for real work.</h2>
     </div>
-    <a class="button" href="/register">Start your free workspace <span aria-hidden="true">→</span></a>
+    <?php $getStartedSize = ''; $getStartedClass = 'menu-end menu-up'; require __DIR__ . '/partials/get-started.php'; ?>
 </section>

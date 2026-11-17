@@ -213,3 +213,164 @@ document.querySelectorAll('.star-rating-options').forEach((group) => {
         paintStars(Number(selected.value), 'is-rated');
     }
 });
+
+// AI Assistant chat window (bottom right). Opened by the launcher or any [data-assistant-open] link.
+const chatWidget = document.querySelector('#chat-widget');
+if (chatWidget instanceof HTMLElement) {
+    const launcher = document.querySelector('.chat-launcher');
+    const messagesBox = chatWidget.querySelector('[data-chat-messages]');
+    const welcome = chatWidget.querySelector('[data-chat-welcome]');
+    const form = chatWidget.querySelector('[data-chat-form]');
+    const input = chatWidget.querySelector('textarea[name="message"]');
+    const sendButton = form?.querySelector('button[type="submit"]');
+    const storageKeys = { open: 'garwin.chat.open', conversation: 'garwin.chat.conversation' };
+    let loadedConversation = null;
+    let busy = false;
+
+    const store = {
+        get(key) { try { return window.sessionStorage.getItem(key); } catch { return null; } },
+        set(key, value) {
+            try {
+                if (value === null) window.sessionStorage.removeItem(key);
+                else window.sessionStorage.setItem(key, value);
+            } catch { /* storage unavailable: the chat still works for this page */ }
+        },
+    };
+
+    const scrollToEnd = () => { messagesBox.scrollTop = messagesBox.scrollHeight; };
+
+    const addMessage = (role, text, extraClass = '') => {
+        welcome?.setAttribute('hidden', '');
+        const bubble = document.createElement('article');
+        bubble.className = `chat-bubble ${role === 'user' ? 'from-user' : 'from-assistant'} ${extraClass}`.trim();
+        const body = document.createElement('p');
+        body.textContent = text;
+        bubble.append(body);
+        messagesBox.append(bubble);
+        scrollToEnd();
+        return bubble;
+    };
+
+    const clearMessages = () => {
+        messagesBox.querySelectorAll('.chat-bubble').forEach((bubble) => bubble.remove());
+        welcome?.removeAttribute('hidden');
+    };
+
+    const autosize = () => {
+        input.style.height = 'auto';
+        input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+    };
+
+    const loadConversation = async () => {
+        const conversationId = store.get(storageKeys.conversation);
+        if (!conversationId || conversationId === loadedConversation) return;
+        loadedConversation = conversationId;
+        try {
+            const response = await fetch(`/assistant/messages?conversation=${encodeURIComponent(conversationId)}`, {
+                headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error('unavailable');
+            const data = await response.json();
+            clearMessages();
+            data.messages.forEach((message) => addMessage(message.role, message.content));
+        } catch {
+            store.set(storageKeys.conversation, null);
+            loadedConversation = null;
+        }
+    };
+
+    const setOpen = (open, { focus = true } = {}) => {
+        chatWidget.hidden = !open;
+        launcher?.classList.toggle('is-open', open);
+        launcher?.setAttribute('aria-expanded', String(open));
+        launcher?.setAttribute('aria-label', open ? 'Close AI Assistant' : 'Open AI Assistant');
+        store.set(storageKeys.open, open ? '1' : null);
+        if (open) {
+            loadConversation();
+            if (focus) input?.focus();
+            scrollToEnd();
+        }
+    };
+
+    document.addEventListener('click', (event) => {
+        const trigger = event.target instanceof Element ? event.target.closest('[data-assistant-open]') : null;
+        if (!trigger) return;
+        event.preventDefault();
+        setOpen(trigger === launcher ? chatWidget.hidden : true);
+    });
+
+    chatWidget.querySelector('[data-chat-close]')?.addEventListener('click', () => {
+        setOpen(false);
+        launcher?.focus();
+    });
+
+    chatWidget.querySelector('[data-chat-new]')?.addEventListener('click', () => {
+        store.set(storageKeys.conversation, null);
+        loadedConversation = null;
+        clearMessages();
+        input?.focus();
+    });
+
+    chatWidget.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            setOpen(false);
+            launcher?.focus();
+        }
+    });
+
+    input?.addEventListener('input', autosize);
+    input?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            form.requestSubmit();
+        }
+    });
+
+    form?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const message = input.value.trim();
+        if (busy || message === '') return;
+
+        busy = true;
+        sendButton.disabled = true;
+        input.value = '';
+        autosize();
+        addMessage('user', message);
+        const pending = addMessage('assistant', 'Thinking…', 'is-pending');
+
+        const body = new URLSearchParams({ _token: chatWidget.dataset.csrf ?? '', message });
+        const conversationId = store.get(storageKeys.conversation);
+        if (conversationId) body.set('conversation_id', conversationId);
+
+        try {
+            const response = await fetch('/assistant/send', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                },
+                body,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'The assistant could not reply. Please try again.');
+
+            store.set(storageKeys.conversation, String(data.conversation_id));
+            loadedConversation = String(data.conversation_id);
+            const reply = data.messages.find((item) => item.role === 'assistant');
+            pending.classList.remove('is-pending');
+            pending.querySelector('p').textContent = reply?.content ?? '';
+        } catch (error) {
+            pending.classList.remove('is-pending');
+            pending.classList.add('is-error');
+            pending.querySelector('p').textContent = error instanceof Error ? error.message : 'Something went wrong.';
+            if (input.value === '') input.value = message;
+        } finally {
+            busy = false;
+            sendButton.disabled = false;
+            scrollToEnd();
+            input.focus();
+        }
+    });
+
+    if (store.get(storageKeys.open) === '1') setOpen(true, { focus: false });
+}

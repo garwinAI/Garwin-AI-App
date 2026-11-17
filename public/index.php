@@ -75,6 +75,7 @@ $router->post('/calendar/events', [$calendar, 'save']);
 $router->post('/calendar/events/delete', [$calendar, 'delete']);
 $router->get('/assistant', [$assistant, 'index']);
 $router->post('/assistant/send', [$assistant, 'send']);
+$router->get('/assistant/messages', [$assistant, 'messages']);
 $router->post('/assistant/rename', [$assistant, 'rename']);
 $router->post('/assistant/delete', [$assistant, 'delete']);
 $router->get('/developer', [$developer, 'index']);
