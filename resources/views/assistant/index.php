@@ -12,44 +12,44 @@
 <?php endif; ?>
 
 <?php if ($budgetStatus !== null): ?>
-    <div class="panel" style="margin-bottom: 16px;">
-        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+    <div class="panel budget-panel">
+        <div class="budget-panel-row">
             <strong>AI budget</strong>
             <span>$<?= number_format((int) $budgetStatus['spent_cents'] / 100, 2) ?> / $<?= number_format((int) $budgetStatus['budget_cents'] / 100, 2) ?></span>
         </div>
-        <progress max="<?= e((string) $budgetStatus['budget_cents']) ?>" value="<?= e((string) min((int) $budgetStatus['budget_cents'], (int) $budgetStatus['spent_cents'])) ?>" style="width:100%; margin-top:8px;"></progress>
+        <progress max="<?= e((string) $budgetStatus['budget_cents']) ?>" value="<?= e((string) min((int) $budgetStatus['budget_cents'], (int) $budgetStatus['spent_cents'])) ?>" class="meter"></progress>
     </div>
 <?php endif; ?>
 
 <section class="assistant-shell" aria-label="AI Assistant">
     <aside class="assistant-history" aria-label="Conversation history">
         <h2>Recent conversations</h2>
-        <form method="get" action="/assistant" style="margin: 0 8px 12px;">
-            <input type="search" name="search" value="<?= e($searchTerm ?? '') ?>" placeholder="Search history" style="width:100%; padding:8px 10px; border:1px solid #d8dce2; border-radius:8px;">
+        <form class="history-search" method="get" action="/assistant">
+            <label class="sr-only" for="assistant-search">Search history</label>
+            <input id="assistant-search" type="search" name="search" value="<?= e($searchTerm ?? '') ?>" placeholder="Search history">
         </form>
         <?php if ($conversations === []): ?>
             <p class="assistant-history-empty">Your conversations will appear here.</p>
         <?php else: ?>
             <nav>
                 <?php foreach ($conversations as $item): ?>
-                    <div style="display:flex; align-items:center; gap:8px; margin: 4px 0;">
+                    <div class="history-item">
                         <a class="assistant-history-link <?= $conversation !== null && (int) $conversation['id'] === (int) $item['id'] ? 'active' : '' ?>"
                            href="/assistant?conversation=<?= (int) $item['id'] ?>"
-                           <?= $conversation !== null && (int) $conversation['id'] === (int) $item['id'] ? 'aria-current="page"' : '' ?>
-                           style="flex:1; min-width:0;">
+                           <?= $conversation !== null && (int) $conversation['id'] === (int) $item['id'] ? 'aria-current="page"' : '' ?>>
                             <?= e($item['title']) ?>
                         </a>
-                        <form method="post" action="/assistant/delete" style="display:inline;">
+                        <form class="inline-form" method="post" action="/assistant/delete">
                             <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
                             <input type="hidden" name="conversation_id" value="<?= (int) $item['id'] ?>">
-                            <button type="submit" class="button button-small" style="padding:4px 8px; font-size:11px;">Delete</button>
+                            <button type="submit" class="button button-tiny button-secondary">Delete</button>
                         </form>
                     </div>
-                    <form method="post" action="/assistant/rename" style="display:flex; gap:6px; margin:0 8px 10px;">
+                    <form class="history-rename" method="post" action="/assistant/rename">
                         <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
                         <input type="hidden" name="conversation_id" value="<?= (int) $item['id'] ?>">
-                        <input type="text" name="title" value="<?= e($item['title']) ?>" maxlength="80" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #d8dce2; border-radius:6px;">
-                        <button type="submit" class="button button-small" style="padding:4px 8px; font-size:11px;">Rename</button>
+                        <input type="text" name="title" value="<?= e($item['title']) ?>" maxlength="80" aria-label="Conversation title">
+                        <button type="submit" class="button button-tiny button-secondary">Rename</button>
                     </form>
                 <?php endforeach; ?>
             </nav>

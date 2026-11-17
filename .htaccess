@@ -1,0 +1,12 @@
+# Fallback for hosts/previews whose document root is the project root instead
+# of public/. Production should still point the document root at public/.
+Options -Indexes
+
+<FilesMatch "^\.|\.(env|lock|md|json|sqlite)$">
+    Require all denied
+</FilesMatch>
+
+RewriteEngine On
+RewriteRule ^(app|bin|bootstrap\.php|database|docs|resources|scripts|tests|var|vendor|node_modules)(/|$) - [F,L]
+RewriteCond %{REQUEST_URI} !^/public/
+RewriteRule ^(.*)$ public/$1 [L]
