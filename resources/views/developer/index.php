@@ -1,7 +1,7 @@
 <section class="page-heading">
     <div>
         <p class="eyebrow">DEVELOPER PROGRAM</p>
-        <h1>Developer App</h1>
+        <h1>Developer</h1>
         <p class="page-subtitle">Build apps, dashboard widgets, and themes for Garwin AI.</p>
     </div>
     <a class="button button-secondary" href="/appzone">Back to AppZone</a>

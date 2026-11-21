@@ -108,6 +108,7 @@ assertTrue(
         '007_create_billing.php',
         '008_create_appzone_checkout.php',
         '009_seed_developer_app.php',
+        '010_create_messages.php',
     ],
     'Foundation, admin, and workspace migrations must apply.'
 );
@@ -251,14 +252,46 @@ assertTrue(
         && str_contains($appZoneHtml, 'Garwin Developer'),
     'The AppZone catalog page must render its ranking sections, listings, and the Developer App.'
 );
+$developerAppId = (int) $pdo->query("SELECT id FROM appzone_items WHERE launch_url = '/developer'")->fetchColumn();
+$installStatement->execute(['app_id' => $developerAppId, 'user_id' => $user['id'], 'installed_at' => gmdate('Y-m-d H:i:s')]);
+assertTrue(
+    App\Services\NavigationService::developerIsInstalled($pdo, (int) $user['id']),
+    'Developer must count as installed once it is installed from AppZone.'
+);
 ob_start();
 (new App\Http\Controllers\DeveloperController())->index();
 $developerHtml = (string) ob_get_clean();
 assertTrue(
-    str_contains($developerHtml, 'Developer App') && str_contains($developerHtml, 'manifest.json')
+    str_contains($developerHtml, '<h1>Developer</h1>') && str_contains($developerHtml, 'manifest.json')
         && str_contains($developerHtml, 'Never execute developer-supplied PHP')
         && str_contains($developerHtml, '<pre><code>'),
-    'The Developer App must render the package guide, examples, and server-code safety rules.'
+    'The Developer app must render the package guide, examples, and server-code safety rules.'
+);
+
+$navigationService = new App\Services\NavigationService($pdo);
+assertTrue(
+    $navigationService->pinnedKeys((int) $user['id']) === App\Services\NavigationService::DEFAULT_PINS,
+    'New accounts must pin Wordbase, Spreadsheets, Codebase, Calendar, and Messenger by default.'
+);
+assertTrue($navigationService->togglePin((int) $user['id'], 'calendar'), 'Pinned apps must be removable.');
+assertTrue($navigationService->togglePin((int) $user['id'], 'dashboard'), 'Workspace items must be pinnable.');
+assertTrue(
+    $navigationService->pinnedKeys((int) $user['id']) === ['wordbase', 'spreadsheets', 'codebase', 'messenger', 'dashboard'],
+    'Pin changes must persist in the user preferences.'
+);
+assertTrue(!$navigationService->togglePin((int) $user['id'], 'not-an-app'), 'Unknown items must not be pinnable.');
+$pdo->prepare(
+    'INSERT INTO messages (sender_user_id, recipient_user_id, subject, body, is_priority, read_at, created_at)
+     VALUES (:sender, :recipient, :subject, :body, :priority, :read_at, :created_at)'
+)->execute(['sender' => $user['id'], 'recipient' => $user['id'], 'subject' => 'Hello', 'body' => 'Fixture', 'priority' => 1, 'read_at' => null, 'created_at' => gmdate('Y-m-d H:i:s')]);
+$navigationData = $navigationService->forUser($user);
+assertTrue(
+    $navigationData['messageCounts'] === ['new' => 1, 'read' => 0, 'priority' => 1],
+    'Messenger counts must reflect unread, read, and priority messages.'
+);
+assertTrue(
+    $navigationData['driveLabel'] === 'USD-' . $user['user_id'] . '-001' && isset($navigationData['items']['developer']),
+    'The sidebar must label the storage drive and list Developer once installed.'
 );
 ob_start();
 (new App\Http\Controllers\DashboardController())->index();
