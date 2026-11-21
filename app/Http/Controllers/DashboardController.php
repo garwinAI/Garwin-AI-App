@@ -10,6 +10,7 @@ use App\Support\Csrf;
 final class DashboardController
 {
     private const WIDGETS = ['overview', 'weather', 'clock', 'files', 'messages', 'notifications', 'support'];
+    private const DEFAULT_SIZES = ['overview' => 'wide', 'messages' => 'wide'];
 
     public function index(): void
     {
@@ -22,10 +23,10 @@ final class DashboardController
         }
 
         $statement = app_db()->prepare(
-            'SELECT m.plan_key, s.quota_bytes, s.used_bytes, b.budget_cents, b.spent_cents
+            'SELECT m.plan_key, COALESCE(p.display_name, m.plan_key) AS plan_name, s.quota_bytes, s.used_bytes
              FROM memberships m
              JOIN storage_accounts s ON s.user_id = m.user_id
-             JOIN ai_budgets b ON b.user_id = m.user_id
+             LEFT JOIN membership_plans p ON p.plan_key = m.plan_key
              WHERE m.user_id = :user_id LIMIT 1'
         );
         $statement->execute(['user_id' => $user['id']]);
@@ -46,6 +47,23 @@ final class DashboardController
         }
         $folderStatement = app_db()->prepare('SELECT COUNT(*) FROM storage_folders WHERE user_id = :user_id');
         $folderStatement->execute(['user_id' => $user['id']]);
+        $unreadMessages = [];
+        $unreadCount = 0;
+        try {
+            $countStatement = app_db()->prepare('SELECT COUNT(*) FROM messages WHERE recipient_user_id = :user_id AND read_at IS NULL');
+            $countStatement->execute(['user_id' => $user['id']]);
+            $unreadCount = (int) $countStatement->fetchColumn();
+            $messageStatement = app_db()->prepare(
+                'SELECT m.id, m.subject, m.is_priority, s.first_name, s.last_name
+                 FROM messages m JOIN users s ON s.id = m.sender_user_id
+                 WHERE m.recipient_user_id = :user_id AND m.read_at IS NULL
+                 ORDER BY m.created_at DESC, m.id DESC LIMIT 3'
+            );
+            $messageStatement->execute(['user_id' => $user['id']]);
+            $unreadMessages = $messageStatement->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\PDOException) {
+            $unreadMessages = [];
+        }
 
         render('dashboard/index', [
             'title' => 'Dashboard',
@@ -54,6 +72,8 @@ final class DashboardController
             'widgetLayout' => $widgetLayout,
             'preferences' => $preferences,
             'folderCount' => (int) $folderStatement->fetchColumn(),
+            'unreadMessages' => $unreadMessages,
+            'unreadCount' => $unreadCount,
         ]);
     }
 
@@ -147,7 +167,7 @@ final class DashboardController
 
         foreach (self::WIDGETS as $id) {
             if (!in_array($id, array_column($normalized, 'id'), true)) {
-                $normalized[] = ['id' => $id, 'size' => 'small'];
+                $normalized[] = ['id' => $id, 'size' => self::DEFAULT_SIZES[$id] ?? 'small'];
             }
         }
 

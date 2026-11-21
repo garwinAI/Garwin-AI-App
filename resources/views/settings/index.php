@@ -16,7 +16,7 @@
         <label>
             Weather location
             <input type="text" name="weather_location" maxlength="100" value="<?= e((string) ($preferences['weather_location'] ?? '')) ?>" placeholder="City, country">
-            <span class="field-hint">The city you enter is sent to Open-Meteo to look up current weather.</span>
+            <span class="field-hint">Leave blank to show weather for your current location automatically. The city or your approximate location is sent to Open-Meteo to look up weather.</span>
         </label>
         <label>
             Clock format

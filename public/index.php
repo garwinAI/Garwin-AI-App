@@ -23,7 +23,7 @@ session_start();
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=(self)');
 header("Content-Security-Policy: default-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'");
 
 set_exception_handler(static function (Throwable $exception): void {

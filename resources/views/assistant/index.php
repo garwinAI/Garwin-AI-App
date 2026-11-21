@@ -11,13 +11,13 @@
     <div class="alert" role="status"><?= e($flashMessage['message'] ?? '') ?></div>
 <?php endif; ?>
 
-<?php if ($budgetStatus !== null): ?>
-    <div class="panel" style="margin-bottom: 16px;">
-        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-            <strong>AI budget</strong>
-            <span>$<?= number_format((int) $budgetStatus['spent_cents'] / 100, 2) ?> / $<?= number_format((int) $budgetStatus['budget_cents'] / 100, 2) ?></span>
+<?php if ($budgetStatus !== null): $usagePercent = (int) $budgetStatus['budget_cents'] > 0 ? min(100, (int) round((int) $budgetStatus['spent_cents'] / (int) $budgetStatus['budget_cents'] * 100)) : 0; ?>
+    <div class="settings-card ai-usage">
+        <div class="ai-usage-row">
+            <strong>AI usage this month</strong>
+            <span><?= $usagePercent ?>% of your plan's allowance</span>
         </div>
-        <progress max="<?= e((string) $budgetStatus['budget_cents']) ?>" value="<?= e((string) min((int) $budgetStatus['budget_cents'], (int) $budgetStatus['spent_cents'])) ?>" style="width:100%; margin-top:8px;"></progress>
+        <progress class="meter" max="100" value="<?= $usagePercent ?>"></progress>
     </div>
 <?php endif; ?>
 

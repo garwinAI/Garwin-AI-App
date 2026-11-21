@@ -297,6 +297,11 @@ ob_start();
 (new App\Http\Controllers\DashboardController())->index();
 $dashboardHtml = (string) ob_get_clean();
 assertTrue(
+    !str_contains($dashboardHtml, 'AI budget') && !str_contains($dashboardHtml, 'spent_cents') && str_contains($dashboardHtml, 'User ID')
+        && str_contains($dashboardHtml, 'Storage'),
+    'The user dashboard must show storage and the User ID, and never AI cost.'
+);
+assertTrue(
     str_contains($dashboardHtml, 'Weather') && str_contains($dashboardHtml, 'Messages')
         && str_contains($dashboardHtml, 'Notifications') && str_contains($dashboardHtml, 'Support'),
     'The dashboard must render its core widgets.'
