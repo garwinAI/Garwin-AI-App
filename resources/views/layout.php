@@ -30,8 +30,50 @@ if ($user !== null && !$user['is_admin']) {
 ?>
 <?php if ($user !== null): ?>
     <div class="app-shell">
+        <header class="topbar">
+            <a class="brand topbar-brand" href="<?= $user['is_admin'] ? '/admin' : '/dashboard' ?>" aria-label="Garwin AI home"><span>Garwin</span><strong>AI</strong></a>
+            <?php if (!$user['is_admin']): ?>
+                <nav class="workspace-shortcuts" aria-label="Workspace shortcuts">
+                    <a class="workspace-shortcut <?= $currentPath === '/dashboard' ? 'active' : '' ?>" href="/dashboard" aria-label="Dashboard" title="Dashboard" <?= $currentPath === '/dashboard' ? 'aria-current="page"' : '' ?>>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
+                    </a>
+                    <button class="workspace-shortcut" type="button" aria-label="Search" title="Search — coming soon" disabled>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
+                    </button>
+                    <a class="workspace-shortcut <?= $currentPath === '/calendar' ? 'active' : '' ?>" href="/calendar" aria-label="Calendar" title="Calendar" <?= $currentPath === '/calendar' ? 'aria-current="page"' : '' ?>>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
+                    </a>
+                    <a class="workspace-shortcut <?= $currentPath === '/assistant' ? 'active' : '' ?>" href="/assistant" aria-label="AI Assistant" title="AI Assistant" <?= $currentPath === '/assistant' ? 'aria-current="page"' : '' ?>>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></svg>
+                    </a>
+                    <a class="workspace-shortcut <?= $currentPath === '/wordbase' ? 'active' : '' ?>" href="/wordbase" aria-label="Wordbase" title="Wordbase" <?= $currentPath === '/wordbase' ? 'aria-current="page"' : '' ?>>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Zm0 3h14M8 12h8M8 8h4"/></svg>
+                    </a>
+                    <a class="workspace-shortcut <?= $currentPath === '/storage' ? 'active' : '' ?>" href="/storage" aria-label="Storage" title="Storage" <?= $currentPath === '/storage' ? 'aria-current="page"' : '' ?>>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v5H4zM4 12h16v7H4z"/><path d="M8 7.5h.01M8 15.5h.01"/></svg>
+                    </a>
+                </nav>
+            <?php else: ?>
+                <span class="topbar-note">Super Admin</span>
+            <?php endif; ?>
+            <a class="support-link" href="mailto:<?= e($supportEmail) ?>">Help &amp; support</a>
+            <?php if (!$user['is_admin']): ?>
+                <div class="pinned-apps" aria-label="Pinned apps">
+                    <span class="pinned-apps-label">Pinned</span>
+                    <div class="pinned-app-slots">
+                        <?php foreach ($pinnedApps as $app): ?>
+                            <a class="pinned-app-link" href="<?= e($app['launch_url']) ?>" target="_blank" rel="noopener noreferrer" title="<?= e($app['name']) ?>" aria-label="<?= e($app['name']) ?>">
+                                <?= e(mb_strtoupper(mb_substr($app['name'], 0, 1))) ?>
+                            </a>
+                        <?php endforeach; ?>
+                        <?php for ($slot = count($pinnedApps) + 1; $slot <= 5; $slot++): ?>
+                            <span class="pinned-app-slot" title="Empty pinned app slot <?= $slot ?> of 5" aria-hidden="true">+</span>
+                        <?php endfor; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </header>
         <aside class="sidebar" aria-label="Main navigation">
-            <a class="brand" href="/dashboard" aria-label="Garwin AI dashboard"><span>Garwin</span><strong>AI</strong></a>
             <?php if ($user['is_admin']): ?>
                 <p class="nav-label">ADMINISTRATION</p>
                 <a class="nav-link" href="/admin">Admin dashboard</a>
@@ -64,49 +106,6 @@ if ($user !== null && !$user['is_admin']) {
             </div>
         </aside>
         <main class="main-content">
-            <header class="topbar">
-                <?php if (!$user['is_admin']): ?>
-                    <nav class="workspace-shortcuts" aria-label="Workspace shortcuts">
-                        <a class="workspace-shortcut <?= $currentPath === '/dashboard' ? 'active' : '' ?>" href="/dashboard" aria-label="Dashboard" title="Dashboard" <?= $currentPath === '/dashboard' ? 'aria-current="page"' : '' ?>>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
-                        </a>
-                        <button class="workspace-shortcut" type="button" aria-label="Search" title="Search — coming soon" disabled>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
-                        </button>
-                        <a class="workspace-shortcut <?= $currentPath === '/calendar' ? 'active' : '' ?>" href="/calendar" aria-label="Calendar" title="Calendar" <?= $currentPath === '/calendar' ? 'aria-current="page"' : '' ?>>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
-                        </a>
-                        <a class="workspace-shortcut <?= $currentPath === '/assistant' ? 'active' : '' ?>" href="/assistant" aria-label="AI Assistant" title="AI Assistant" <?= $currentPath === '/assistant' ? 'aria-current="page"' : '' ?>>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></svg>
-                        </a>
-                        <a class="workspace-shortcut <?= $currentPath === '/wordbase' ? 'active' : '' ?>" href="/wordbase" aria-label="Wordbase" title="Wordbase" <?= $currentPath === '/wordbase' ? 'aria-current="page"' : '' ?>>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Zm0 3h14M8 12h8M8 8h4"/></svg>
-                        </a>
-                        <a class="workspace-shortcut <?= $currentPath === '/storage' ? 'active' : '' ?>" href="/storage" aria-label="Storage" title="Storage" <?= $currentPath === '/storage' ? 'aria-current="page"' : '' ?>>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v5H4zM4 12h16v7H4z"/><path d="M8 7.5h.01M8 15.5h.01"/></svg>
-                        </a>
-                    </nav>
-                <?php else: ?>
-                    <span class="brand compact"><span>Garwin</span><strong>AI</strong></span>
-                    <span class="topbar-note">Super Admin</span>
-                <?php endif; ?>
-                <a class="support-link" href="mailto:<?= e($supportEmail) ?>">Help &amp; support</a>
-                <?php if (!$user['is_admin']): ?>
-                    <div class="pinned-apps" aria-label="Pinned apps">
-                        <span class="pinned-apps-label">Pinned</span>
-                        <div class="pinned-app-slots">
-                            <?php foreach ($pinnedApps as $app): ?>
-                                <a class="pinned-app-link" href="<?= e($app['launch_url']) ?>" target="_blank" rel="noopener noreferrer" title="<?= e($app['name']) ?>" aria-label="<?= e($app['name']) ?>">
-                                    <?= e(mb_strtoupper(mb_substr($app['name'], 0, 1))) ?>
-                                </a>
-                            <?php endforeach; ?>
-                            <?php for ($slot = count($pinnedApps) + 1; $slot <= 5; $slot++): ?>
-                                <span class="pinned-app-slot" title="Empty pinned app slot <?= $slot ?> of 5" aria-hidden="true">+</span>
-                            <?php endfor; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
-            </header>
             <div class="workspace"><?= $content ?></div>
         </main>
     </div>
