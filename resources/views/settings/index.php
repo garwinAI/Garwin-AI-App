@@ -16,13 +16,13 @@
         <label>
             Weather location
             <input type="text" name="weather_location" maxlength="100" value="<?= e((string) ($preferences['weather_location'] ?? '')) ?>" placeholder="City, country">
-            <span class="field-hint">The city you enter is sent to Open-Meteo to look up current weather.</span>
+            <span class="field-hint">Leave blank to show weather for your current location automatically. The city or your approximate location is sent to Open-Meteo to look up weather.</span>
         </label>
         <label>
             Clock format
             <select name="time_format">
-                <option value="24" <?= ($preferences['time_format'] ?? '24') === '24' ? 'selected' : '' ?>>24-hour</option>
-                <option value="12" <?= ($preferences['time_format'] ?? '24') === '12' ? 'selected' : '' ?>>12-hour</option>
+                <option value="24" <?= ($preferences['time_format'] ?? '12') === '24' ? 'selected' : '' ?>>24-hour</option>
+                <option value="12" <?= ($preferences['time_format'] ?? '12') === '12' ? 'selected' : '' ?>>12-hour</option>
             </select>
         </label>
         <label>

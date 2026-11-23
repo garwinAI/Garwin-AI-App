@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Services\NavigationService;
 use RuntimeException;
 
 final class DeveloperController
@@ -17,6 +18,10 @@ final class DeveloperController
         if ($user['is_admin']) {
             redirect('/admin');
         }
+        if (!NavigationService::developerIsInstalled(app_db(), (int) $user['id'])) {
+            set_flash_message('error', 'Install Garwin Developer from AppZone to open it.');
+            redirect('/appzone');
+        }
 
         $guidePath = dirname(__DIR__, 3) . '/docs/developer-platform.md';
         $markdown = file_get_contents($guidePath);
@@ -25,7 +30,7 @@ final class DeveloperController
         }
 
         render('developer/index', [
-            'title' => 'Developer App',
+            'title' => 'Developer',
             'user' => $user,
             'guideHtml' => $this->renderMarkdown($markdown),
         ]);

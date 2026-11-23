@@ -108,6 +108,8 @@ assertTrue(
         '007_create_billing.php',
         '008_create_appzone_checkout.php',
         '009_seed_developer_app.php',
+        '010_create_messages.php',
+        '011_create_workspace_pages.php',
     ],
     'Foundation, admin, and workspace migrations must apply.'
 );
@@ -251,18 +253,57 @@ assertTrue(
         && str_contains($appZoneHtml, 'Garwin Developer'),
     'The AppZone catalog page must render its ranking sections, listings, and the Developer App.'
 );
+$developerAppId = (int) $pdo->query("SELECT id FROM appzone_items WHERE launch_url = '/developer'")->fetchColumn();
+$installStatement->execute(['app_id' => $developerAppId, 'user_id' => $user['id'], 'installed_at' => gmdate('Y-m-d H:i:s')]);
+assertTrue(
+    App\Services\NavigationService::developerIsInstalled($pdo, (int) $user['id']),
+    'Developer must count as installed once it is installed from AppZone.'
+);
 ob_start();
 (new App\Http\Controllers\DeveloperController())->index();
 $developerHtml = (string) ob_get_clean();
 assertTrue(
-    str_contains($developerHtml, 'Developer App') && str_contains($developerHtml, 'manifest.json')
+    str_contains($developerHtml, '<h1>Developer</h1>') && str_contains($developerHtml, 'manifest.json')
         && str_contains($developerHtml, 'Never execute developer-supplied PHP')
         && str_contains($developerHtml, '<pre><code>'),
-    'The Developer App must render the package guide, examples, and server-code safety rules.'
+    'The Developer app must render the package guide, examples, and server-code safety rules.'
+);
+
+$navigationService = new App\Services\NavigationService($pdo);
+assertTrue(
+    $navigationService->pinnedKeys((int) $user['id']) === App\Services\NavigationService::DEFAULT_PINS,
+    'New accounts must pin Wordbase, Spreadsheets, Codebase, Storage, and AppZone by default.'
+);
+assertTrue(!$navigationService->togglePin((int) $user['id'], 'calendar'), 'Calendar is fixed on the top bar and must not be pinnable.');
+assertTrue(!$navigationService->togglePin((int) $user['id'], 'dashboard'), 'The top bar must hold at most 5 pinned apps.');
+assertTrue($navigationService->togglePin((int) $user['id'], 'codebase'), 'Pinned apps must be removable.');
+assertTrue($navigationService->togglePin((int) $user['id'], 'dashboard'), 'Workspace items must be pinnable once there is room.');
+assertTrue(
+    $navigationService->pinnedKeys((int) $user['id']) === ['wordbase', 'spreadsheets', 'storage', 'appzone', 'dashboard'],
+    'Pin changes must persist in the user preferences.'
+);
+assertTrue(!$navigationService->togglePin((int) $user['id'], 'not-an-app'), 'Unknown items must not be pinnable.');
+$pdo->prepare(
+    'INSERT INTO messages (sender_user_id, recipient_user_id, subject, body, is_priority, read_at, created_at)
+     VALUES (:sender, :recipient, :subject, :body, :priority, :read_at, :created_at)'
+)->execute(['sender' => $user['id'], 'recipient' => $user['id'], 'subject' => 'Hello', 'body' => 'Fixture', 'priority' => 1, 'read_at' => null, 'created_at' => gmdate('Y-m-d H:i:s')]);
+$navigationData = $navigationService->forUser($user);
+assertTrue(
+    $navigationData['messageCounts'] === ['new' => 1, 'read' => 0, 'priority' => 1],
+    'Messenger counts must reflect unread, read, and priority messages.'
+);
+assertTrue(
+    $navigationData['driveLabel'] === 'USD-' . $user['user_id'] . '-001' && isset($navigationData['items']['developer']),
+    'The sidebar must label the storage drive and list Developer once installed.'
 );
 ob_start();
 (new App\Http\Controllers\DashboardController())->index();
 $dashboardHtml = (string) ob_get_clean();
+assertTrue(
+    !str_contains($dashboardHtml, 'AI budget') && !str_contains($dashboardHtml, 'spent_cents') && str_contains($dashboardHtml, 'User ID')
+        && str_contains($dashboardHtml, 'Storage'),
+    'The user dashboard must show storage and the User ID, and never AI cost.'
+);
 assertTrue(
     str_contains($dashboardHtml, 'Weather') && str_contains($dashboardHtml, 'Messages')
         && str_contains($dashboardHtml, 'Notifications') && str_contains($dashboardHtml, 'Support'),
@@ -324,6 +365,118 @@ ob_start();
 (new App\Http\Controllers\StorageController())->index();
 $storageHtml = (string) ob_get_clean();
 assertTrue(str_contains($storageHtml, 'My Drive') && str_contains($storageHtml, 'Documents'), 'Storage must display the user’s provisioned folders.');
+
+// Dashboard: any subset of widgets, renamed titles, and the version 1 → 2 upgrade.
+$_POST = [
+    '_token' => App\Support\Csrf::token(),
+    'layout_json' => json_encode(['widgets' => [
+        ['id' => 'notify', 'size' => 'small', 'title' => 'My inbox'],
+        ['id' => 'clock', 'size' => 'small', 'title' => 'Clock'],
+    ]], JSON_THROW_ON_ERROR),
+];
+http_response_code(200);
+ob_start();
+(new App\Http\Controllers\DashboardController())->saveLayout();
+ob_end_clean();
+$savedLayout = json_decode((string) $pdo->query('SELECT layout_json FROM dashboard_layouts WHERE user_id = ' . (int) $user['id'])->fetchColumn(), true);
+assertTrue(
+    http_response_code() === 204 && $savedLayout['version'] === 3 && count($savedLayout['widgets']) === 2
+        && $savedLayout['widgets'][0]['title'] === 'My inbox' && $savedLayout['widgets'][1]['title'] === '',
+    'Dashboards must save any set of widgets with renamed titles; a default title is stored as blank.'
+);
+$_POST['layout_json'] = json_encode(['widgets' => [['id' => 'clock', 'size' => 'small', 'title' => str_repeat('x', 41)]]], JSON_THROW_ON_ERROR);
+http_response_code(200);
+ob_start();
+(new App\Http\Controllers\DashboardController())->saveLayout();
+ob_end_clean();
+assertTrue(http_response_code() === 422, 'Widget titles longer than 40 characters must be rejected.');
+$pdo->exec("UPDATE dashboard_layouts SET layout_json = '{\"widgets\":[{\"id\":\"overview\",\"size\":\"wide\"},{\"id\":\"weather\",\"size\":\"small\"},{\"id\":\"clock\",\"size\":\"small\"}]}' WHERE user_id = " . (int) $user['id']);
+$_POST = [];
+http_response_code(200);
+ob_start();
+(new App\Http\Controllers\DashboardController())->index();
+$dashboardHtml = (string) ob_get_clean();
+preg_match('/data-layout="([^"]*)"/', $dashboardHtml, $layoutMatch);
+$shownLayout = json_decode(html_entity_decode($layoutMatch[1] ?? '[]'), true);
+assertTrue(
+    array_column($shownLayout, 'id') === ['welcome', 'overview', 'notify', 'clock', 'weather'],
+    'Older dashboards must gain Notify where Weather was (Weather moves to the end) and the Welcome widget on top.'
+);
+assertTrue(
+    str_contains($dashboardHtml, 'workspace-search') && str_contains($dashboardHtml, 'Your apps')
+        && str_contains($dashboardHtml, 'data-widget-gallery') && str_contains($dashboardHtml, 'Add a page'),
+    'The dashboard must show the search bar and the Apps, Widgets and Pages menus.'
+);
+
+// Pages: create, save, duplicate, delete; content is checked per type.
+$pageService = new App\Services\WorkspacePageService($pdo);
+$docId = $pageService->create((int) $user['id'], 'doc');
+$sheetId = $pageService->create((int) $user['id'], 'sheet');
+$calendarId = $pageService->create((int) $user['id'], 'calendar');
+assertTrue($docId !== null && $sheetId !== null && $calendarId !== null, 'Docs, spreadsheets and calendars must be creatable as pages.');
+assertTrue($pageService->create((int) $user['id'], 'video') === null, 'Unknown page types must be refused.');
+assertTrue($pageService->save((int) $user['id'], $sheetId, 'Budget', '{"cells":{"A1":"10","B2":"=SUM(A1:A3)"}}') === null, 'Spreadsheet cells must save.');
+assertTrue($pageService->save((int) $user['id'], $sheetId, 'Budget', '{"cells":{"Z99":"1"}}') !== null, 'Cells outside the grid must be refused.');
+assertTrue($pageService->save((int) $user['id'], $calendarId, 'Team', '{"events":{"2026-11-23":["Standup"]}}') === null, 'Calendar page events must save.');
+assertTrue($pageService->save((int) $user['id'], $calendarId, 'Team', '{"events":{"2026-02-30":["Nope"]}}') !== null, 'Impossible dates must be refused.');
+$copyId = $pageService->duplicate((int) $user['id'], $sheetId);
+$copy = $copyId === null ? null : $pageService->find((int) $user['id'], $copyId);
+assertTrue($copy !== null && $copy['title'] === 'Budget (copy)' && str_contains($copy['content'], '=SUM(A1:A3)'), 'Duplicating a page must copy its content.');
+assertTrue($pageService->delete((int) $user['id'], $copyId) && $pageService->find((int) $user['id'], $copyId) === null, 'Pages must be deletable.');
+assertTrue(!$pageService->delete((int) $user['id'] + 999, $docId), 'Users must not delete pages that are not theirs.');
+assertTrue(count($pageService->listForUser((int) $user['id'])) === 3, 'The Pages list must show the user’s pages.');
+
+// Windows: Note and Page windows save with their text; bad ones are refused.
+$_POST = [
+    '_token' => App\Support\Csrf::token(),
+    'layout_json' => json_encode(['widgets' => [
+        ['id' => 'welcome', 'size' => 'full', 'title' => 'Hello'],
+        ['id' => 'window-0a1b2c3d', 'size' => 'small', 'title' => 'Ideas', 'kind' => 'note', 'note' => 'Ship Pages'],
+        ['id' => 'window-0a1b2c3e', 'size' => 'wide', 'title' => 'Budget', 'kind' => 'page', 'page_id' => $sheetId],
+    ]], JSON_THROW_ON_ERROR),
+];
+http_response_code(200);
+ob_start();
+(new App\Http\Controllers\DashboardController())->saveLayout();
+ob_end_clean();
+$savedLayout = json_decode((string) $pdo->query('SELECT layout_json FROM dashboard_layouts WHERE user_id = ' . (int) $user['id'])->fetchColumn(), true);
+assertTrue(
+    http_response_code() === 204 && $savedLayout['widgets'][1]['note'] === 'Ship Pages' && $savedLayout['widgets'][2]['page_id'] === $sheetId,
+    'Note and Page windows must save with their contents.'
+);
+$_POST['layout_json'] = json_encode(['widgets' => [['id' => 'window-zzzz', 'size' => 'small', 'title' => 'X', 'kind' => 'note', 'note' => '']]], JSON_THROW_ON_ERROR);
+http_response_code(200);
+ob_start();
+(new App\Http\Controllers\DashboardController())->saveLayout();
+ob_end_clean();
+assertTrue(http_response_code() === 422, 'Malformed window ids must be refused.');
+$_POST = [];
+ob_start();
+(new App\Http\Controllers\DashboardController())->index();
+$dashboardHtml = (string) ob_get_clean();
+assertTrue(
+    str_contains($dashboardHtml, 'Ship Pages') && str_contains($dashboardHtml, 'Open spreadsheet') && str_contains($dashboardHtml, 'widget-welcome'),
+    'The dashboard must show the Welcome widget, Note windows and Page windows.'
+);
+
+// Menu links: added, edited, moved and removed; unsafe addresses are refused.
+$menu = new App\Services\NavigationService($pdo);
+assertTrue($menu->saveMenuLink((int) $user['id'], null, 'Docs', 'docs.garwinai.com', 'globe', 'emerald') === null, 'Menu links must be addable.');
+assertTrue($menu->saveMenuLink((int) $user['id'], null, 'Team', '/pages/view?id=1', 'users', 'purple') === null, 'Links to pages here must be addable.');
+assertTrue($menu->saveMenuLink((int) $user['id'], null, 'Bad', 'javascript:alert(1)', 'link', 'sky') !== null, 'Script links must be refused.');
+$links = $menu->menuLinks((int) $user['id']);
+assertTrue(count($links) === 2 && $links[0]['url'] === 'https://docs.garwinai.com', 'Bare domains must become https links.');
+assertTrue($menu->saveMenuLink((int) $user['id'], $links[0]['id'], 'Help docs', $links[0]['url'], 'help', 'sky') === null && $menu->menuLinks((int) $user['id'])[0]['label'] === 'Help docs', 'Menu links must be renamable.');
+assertTrue($menu->moveMenuLink((int) $user['id'], $links[1]['id'], -1) && $menu->menuLinks((int) $user['id'])[0]['label'] === 'Team', 'Menu links must be reorderable.');
+assertTrue($menu->deleteMenuLink((int) $user['id'], $links[1]['id']) && count($menu->menuLinks((int) $user['id'])) === 1, 'Menu links must be removable.');
+
+// Apps: turning an app off hides it from the top bar until it is turned back on.
+$appsNavigation = new App\Services\NavigationService($pdo);
+assertTrue($appsNavigation->toggleActive((int) $user['id'], 'wordbase'), 'Apps must be deactivatable.');
+assertTrue(!in_array('wordbase', $appsNavigation->forUser($user)['pins'], true), 'Deactivated apps must leave the top bar.');
+assertTrue($appsNavigation->findApp((int) $user['id'], 'wordbase')['active'] === false, 'Deactivated apps must show as off.');
+assertTrue($appsNavigation->toggleActive((int) $user['id'], 'wordbase') && in_array('wordbase', $appsNavigation->forUser($user)['pins'], true), 'Apps must be reactivatable.');
+assertTrue(!$appsNavigation->toggleActive((int) $user['id'], 'not-an-app'), 'Unknown apps must not be toggled.');
 
 $generator = new UserIdGenerator($pdo);
 $existingId = $user['user_id'];

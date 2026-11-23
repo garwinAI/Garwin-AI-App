@@ -33,7 +33,7 @@ final class SettingsController
         }
 
         $locationInput = $_POST['weather_location'] ?? '';
-        $timeFormatInput = $_POST['time_format'] ?? '24';
+        $timeFormatInput = $_POST['time_format'] ?? '12';
         $storageViewInput = $_POST['storage_view'] ?? 'grid';
         if (!is_string($locationInput) || !is_string($timeFormatInput) || !is_string($storageViewInput)) {
             set_flash_message('error', 'Check your settings and try again.');
