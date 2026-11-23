@@ -21,8 +21,8 @@
         <label>
             Clock format
             <select name="time_format">
-                <option value="24" <?= ($preferences['time_format'] ?? '24') === '24' ? 'selected' : '' ?>>24-hour</option>
-                <option value="12" <?= ($preferences['time_format'] ?? '24') === '12' ? 'selected' : '' ?>>12-hour</option>
+                <option value="24" <?= ($preferences['time_format'] ?? '12') === '24' ? 'selected' : '' ?>>24-hour</option>
+                <option value="12" <?= ($preferences['time_format'] ?? '12') === '12' ? 'selected' : '' ?>>12-hour</option>
             </select>
         </label>
         <label>

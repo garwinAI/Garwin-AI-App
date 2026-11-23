@@ -10,18 +10,64 @@ document.addEventListener('submit', (event) => {
 
 if (widgetGrid instanceof HTMLElement) {
     const saveStatus = document.querySelector('#layout-save-status');
+    const tray = document.querySelector('#widget-tray');
+    const gallery = document.querySelector('[data-widget-gallery]');
     let draggedWidget = null;
+    let galleryDragId = null;
     let saveTimer = null;
+    let noteTimer = null;
 
-    const widgets = () => [...widgetGrid.querySelectorAll('.dashboard-widget')];
-    const currentLayout = () => widgets().map((widget) => ({
-        id: widget.dataset.widget,
-        size: widget.dataset.widgetSize,
-    }));
+    const widgets = () => [...widgetGrid.querySelectorAll(':scope > .dashboard-widget')];
+    const allWidgets = () => [...document.querySelectorAll('.dashboard-widget')];
+    const findWidget = (id) => allWidgets().find((item) => item.dataset.widget === id);
+    const currentLayout = () => widgets().map((widget) => {
+        const entry = {
+            id: widget.dataset.widget,
+            size: widget.dataset.widgetSize,
+            title: widget.dataset.widgetCustomTitle ?? '',
+        };
+        if (widget.dataset.windowKind === 'note') {
+            entry.kind = 'note';
+            entry.note = widget.querySelector('[data-window-note]')?.value ?? '';
+        } else if (widget.dataset.windowKind === 'page') {
+            entry.kind = 'page';
+            entry.page_id = Number(widget.dataset.pageId);
+        }
+        return entry;
+    });
+
+    const syncGallery = () => {
+        if (!(gallery instanceof HTMLElement)) return;
+        const onPage = new Set(widgets().map((widget) => widget.dataset.widget));
+        gallery.querySelectorAll('[data-gallery-widget]').forEach((item) => {
+            if (!(item instanceof HTMLElement)) return;
+            const isOn = onPage.has(item.dataset.galleryWidget);
+            item.classList.toggle('is-on-page', isOn);
+            item.draggable = !isOn;
+        });
+        widgetGrid.classList.toggle('is-empty', onPage.size === 0);
+    };
+
+    let layoutPending = false;
+    const layoutBody = () => new URLSearchParams({
+        _token: widgetGrid.dataset.csrf ?? '',
+        layout_json: JSON.stringify({ widgets: currentLayout() }),
+    });
+    // Leaving mid-edit (say, typing in a note): send the last change right away.
+    window.addEventListener('pagehide', () => {
+        if (!layoutPending) return;
+        window.clearTimeout(saveTimer);
+        window.clearTimeout(noteTimer);
+        layoutPending = false;
+        navigator.sendBeacon('/dashboard/layout', layoutBody());
+    });
 
     const saveLayout = () => {
+        syncGallery();
+        layoutPending = true;
         window.clearTimeout(saveTimer);
         saveTimer = window.setTimeout(async () => {
+            layoutPending = false;
             if (!(saveStatus instanceof HTMLElement)) return;
             saveStatus.textContent = 'Saving layout…';
 
@@ -29,10 +75,7 @@ if (widgetGrid instanceof HTMLElement) {
                 const response = await fetch('/dashboard/layout', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-                    body: new URLSearchParams({
-                        _token: widgetGrid.dataset.csrf ?? '',
-                        layout_json: JSON.stringify({ widgets: currentLayout() }),
-                    }),
+                    body: layoutBody(),
                 });
                 if (!response.ok) {
                     throw new Error(await response.text() || 'Unable to save dashboard layout.');
@@ -44,26 +87,50 @@ if (widgetGrid instanceof HTMLElement) {
         }, 250);
     };
 
+    // Place widgets in their saved order; anything not on the page waits in the tray.
     try {
         const layout = JSON.parse(widgetGrid.dataset.layout ?? '[]');
+        const placed = new Set();
         if (Array.isArray(layout)) {
             for (const entry of layout) {
-                const widget = widgets().find((item) => item.dataset.widget === entry.id);
+                const widget = findWidget(entry.id);
                 if (widget && ['small', 'wide', 'full'].includes(entry.size)) {
                     widget.dataset.widgetSize = entry.size;
                     widgetGrid.append(widget);
+                    placed.add(entry.id);
                 }
             }
         }
+        widgets().forEach((widget) => {
+            if (!placed.has(widget.dataset.widget) && tray instanceof HTMLElement) tray.append(widget);
+        });
     } catch (error) {
         if (saveStatus instanceof HTMLElement) {
             saveStatus.textContent = 'Saved dashboard layout could not be loaded.';
         }
     }
+    syncGallery();
+
+    const addWidget = (id, before = null) => {
+        const widget = findWidget(id);
+        if (!widget || widget.parentElement === widgetGrid) return;
+        widgetGrid.insertBefore(widget, before);
+        widget.classList.add('just-added');
+        window.setTimeout(() => widget.classList.remove('just-added'), 900);
+        saveLayout();
+    };
+
+    const insertionPoint = (event) => {
+        const target = event.target instanceof Element ? event.target.closest('.dashboard-widget') : null;
+        if (!(target instanceof HTMLElement) || target.parentElement !== widgetGrid) return undefined;
+        const bounds = target.getBoundingClientRect();
+        const after = event.clientX > bounds.left + bounds.width / 2 || event.clientY > bounds.top + bounds.height * 0.75;
+        return after ? target.nextElementSibling : target;
+    };
 
     widgetGrid.addEventListener('dragstart', (event) => {
         const target = event.target instanceof Element ? event.target.closest('.dashboard-widget') : null;
-        if (!(target instanceof HTMLElement) || event.target instanceof Element && event.target.closest('.widget-actions')) {
+        if (!(target instanceof HTMLElement) || event.target instanceof Element && event.target.closest('.widget-actions, [contenteditable="true"], textarea, input')) {
             event.preventDefault();
             return;
         }
@@ -74,20 +141,124 @@ if (widgetGrid instanceof HTMLElement) {
     });
 
     widgetGrid.addEventListener('dragover', (event) => {
+        if (galleryDragId) {
+            event.preventDefault();
+            widgetGrid.classList.add('is-drop-target');
+            return;
+        }
         if (!draggedWidget) return;
         event.preventDefault();
-        const target = event.target instanceof Element ? event.target.closest('.dashboard-widget') : null;
-        if (target instanceof HTMLElement && target !== draggedWidget) {
-            const bounds = target.getBoundingClientRect();
-            const insertAfter = event.clientY > bounds.top + bounds.height / 2;
-            widgetGrid.insertBefore(draggedWidget, insertAfter ? target.nextElementSibling : target);
+        const point = insertionPoint(event);
+        if (point !== undefined && point !== draggedWidget) {
+            widgetGrid.insertBefore(draggedWidget, point);
         }
     });
 
+    widgetGrid.addEventListener('dragleave', (event) => {
+        if (!(event.relatedTarget instanceof Node) || !widgetGrid.contains(event.relatedTarget)) {
+            widgetGrid.classList.remove('is-drop-target');
+        }
+    });
+
+    widgetGrid.addEventListener('drop', (event) => {
+        if (!galleryDragId) return;
+        event.preventDefault();
+        widgetGrid.classList.remove('is-drop-target');
+        const point = insertionPoint(event);
+        addWidget(galleryDragId, point === undefined ? null : point);
+        galleryDragId = null;
+    });
+
     widgetGrid.addEventListener('dragend', () => {
-        draggedWidget?.classList.remove('is-dragging');
+        if (!draggedWidget) return;
+        draggedWidget.classList.remove('is-dragging');
         draggedWidget = null;
         saveLayout();
+    });
+
+    if (gallery instanceof HTMLDetailsElement) {
+        gallery.addEventListener('dragstart', (event) => {
+            const item = event.target instanceof Element ? event.target.closest('[data-gallery-widget]') : null;
+            if (!(item instanceof HTMLElement) || item.classList.contains('is-on-page')) {
+                event.preventDefault();
+                return;
+            }
+            galleryDragId = item.dataset.galleryWidget ?? null;
+            event.dataTransfer?.setData('text/plain', galleryDragId ?? '');
+            if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
+            // Let the page underneath take the drop.
+            window.setTimeout(() => gallery.classList.add('is-dragging-out'), 0);
+        });
+        gallery.addEventListener('dragend', () => {
+            galleryDragId = null;
+            gallery.classList.remove('is-dragging-out');
+            widgetGrid.classList.remove('is-drop-target');
+            gallery.open = false;
+        });
+        gallery.addEventListener('click', (event) => {
+            const button = event.target instanceof Element ? event.target.closest('[data-gallery-add]') : null;
+            if (button instanceof HTMLElement) {
+                addWidget(button.dataset.galleryAdd ?? '');
+                gallery.open = false;
+            }
+        });
+    }
+
+    const startRename = (widget) => {
+        const title = widget.querySelector('[data-widget-title]');
+        if (!(title instanceof HTMLElement) || title.isContentEditable) return;
+        const before = title.textContent ?? '';
+        title.contentEditable = 'true';
+        title.spellcheck = false;
+        widget.draggable = false;
+        title.focus();
+        const range = document.createRange();
+        range.selectNodeContents(title);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+
+        const finish = (keep) => {
+            title.removeEventListener('keydown', onKey);
+            title.removeEventListener('blur', onBlur);
+            title.contentEditable = 'false';
+            widget.draggable = true;
+            const fallback = title.dataset.defaultTitle ?? before;
+            let next = keep ? (title.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) : before;
+            if (next === '') next = fallback;
+            title.textContent = next;
+            // Windows always keep their own name; built-in widgets store a blank for "use the default".
+            const custom = widget.dataset.windowKind || next !== fallback ? next : '';
+            if (keep && custom !== (widget.dataset.widgetCustomTitle ?? '')) {
+                widget.dataset.widgetCustomTitle = custom;
+                saveLayout();
+            }
+        };
+        const onKey = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                finish(true);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                finish(false);
+            }
+        };
+        const onBlur = () => finish(true);
+        title.addEventListener('keydown', onKey);
+        title.addEventListener('blur', onBlur);
+    };
+
+    widgetGrid.addEventListener('input', (event) => {
+        if (!(event.target instanceof HTMLTextAreaElement) || !event.target.matches('[data-window-note]')) return;
+        window.clearTimeout(noteTimer);
+        layoutPending = true;
+        noteTimer = window.setTimeout(saveLayout, 700);
+    });
+
+    widgetGrid.addEventListener('dblclick', (event) => {
+        const title = event.target instanceof Element ? event.target.closest('[data-widget-title]') : null;
+        const widget = title?.closest('.dashboard-widget');
+        if (widget instanceof HTMLElement) startRename(widget);
     });
 
     widgetGrid.addEventListener('click', (event) => {
@@ -95,6 +266,26 @@ if (widgetGrid instanceof HTMLElement) {
         if (!(button instanceof HTMLButtonElement)) return;
         const widget = button.closest('.dashboard-widget');
         if (!(widget instanceof HTMLElement)) return;
+
+        if (button.classList.contains('widget-rename')) {
+            startRename(widget);
+            return;
+        }
+
+        if (button.classList.contains('widget-remove')) {
+            if (widget.dataset.windowKind) {
+                // Windows are deleted, not parked: a note's text goes with it.
+                const note = widget.querySelector('[data-window-note]');
+                if (note instanceof HTMLTextAreaElement && note.value.trim() !== '' && !window.confirm('Delete this note window and its text?')) {
+                    return;
+                }
+                widget.remove();
+            } else if (tray instanceof HTMLElement) {
+                tray.append(widget);
+            }
+            saveLayout();
+            return;
+        }
 
         if (button.classList.contains('widget-size-toggle')) {
             const sizes = ['small', 'wide', 'full'];
@@ -113,7 +304,45 @@ if (widgetGrid instanceof HTMLElement) {
             saveLayout();
         }
     });
+
+    // The Notify widget's Notifications row opens the top bar's notifications panel.
+    widgetGrid.addEventListener('click', (event) => {
+        const link = event.target instanceof Element ? event.target.closest('a[href="/dashboard#notifications"]') : null;
+        const bell = document.querySelector('.topbar-menu-popover');
+        if (link && bell instanceof HTMLDetailsElement) {
+            event.preventDefault();
+            bell.open = true;
+            bell.querySelector('summary')?.focus();
+        }
+    });
 }
+
+// Toolbar popovers (Apps, Widgets, Pages) and the top bar bell: one open at a time,
+// closed by clicking elsewhere or pressing Escape.
+const popovers = () => [...document.querySelectorAll('[data-toolbar-popover], .topbar-menu-popover')];
+document.addEventListener('toggle', (event) => {
+    const opened = event.target;
+    if (!(opened instanceof HTMLDetailsElement) || !opened.open || !popovers().includes(opened)) return;
+    popovers().forEach((other) => {
+        if (other !== opened && other instanceof HTMLDetailsElement) other.open = false;
+    });
+}, true);
+document.addEventListener('click', (event) => {
+    popovers().forEach((popover) => {
+        if (popover instanceof HTMLDetailsElement && popover.open && event.target instanceof Node && !popover.contains(event.target)) {
+            popover.open = false;
+        }
+    });
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    popovers().forEach((popover) => {
+        if (popover instanceof HTMLDetailsElement && popover.open) {
+            popover.open = false;
+            popover.querySelector('summary')?.focus();
+        }
+    });
+});
 
 // Greeting and today's date in the dashboard header use the viewer's own clock.
 const greeting = document.querySelector('[data-greeting]');
@@ -131,14 +360,14 @@ const clock = document.querySelector('#workspace-clock');
 const date = document.querySelector('#workspace-date');
 if (clock instanceof HTMLElement && date instanceof HTMLElement) {
     const clockWidget = clock.closest('[data-time-format]');
-    const isTwelveHour = clockWidget instanceof HTMLElement && clockWidget.dataset.timeFormat === '12';
+    const isTwelveHour = !(clockWidget instanceof HTMLElement && clockWidget.dataset.timeFormat === '24');
     const zone = document.querySelector('#workspace-zone');
     if (zone instanceof HTMLElement) {
         zone.textContent = (Intl.DateTimeFormat().resolvedOptions().timeZone ?? '').replace(/_/g, ' ');
     }
     const updateClock = () => {
         const now = new Date();
-        clock.textContent = new Intl.DateTimeFormat(undefined, {
+        clock.textContent = new Intl.DateTimeFormat('en-US', {
             hour: 'numeric',
             minute: '2-digit',
             hour12: isTwelveHour,

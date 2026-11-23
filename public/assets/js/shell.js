@@ -7,11 +7,15 @@
     }
 
     const STORAGE_KEY = 'garwin.sidebar';
-    const MIN_WIDTH = 200;
-    const MAX_WIDTH = 420;
+    const MIN_WIDTH = 160;
+    // Dragging narrower than this snaps the sidebar to icons only.
+    const SNAP_TO_ICONS = 110;
+    // Always leave room for the main window.
+    const MIN_MAIN = 360;
+    const maxWidth = () => Math.max(MIN_WIDTH, window.innerWidth - MIN_MAIN);
     const DEFAULT_WIDTH = 248;
     const mobileQuery = window.matchMedia('(max-width: 680px)');
-    const toggle = shell.querySelector('[data-sidebar-toggle]');
+    const toggles = shell.querySelectorAll('[data-sidebar-toggle]');
     const resizer = shell.querySelector('[data-sidebar-resizer]');
     const backdrop = shell.querySelector('[data-sidebar-backdrop]');
 
@@ -35,11 +39,11 @@
         }
     };
 
-    const clampWidth = (width) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(Number(width) || DEFAULT_WIDTH)));
+    const clampWidth = (width) => Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(Number(width) || DEFAULT_WIDTH)));
     const applyWidth = () => shell.style.setProperty('--sidebar-width', `${clampWidth(state.width)}px`);
     const syncToggle = () => {
         const expanded = mobileQuery.matches ? shell.classList.contains('sidebar-open') : !state.collapsed;
-        toggle?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        toggles.forEach((button) => button.setAttribute('aria-expanded', expanded ? 'true' : 'false'));
     };
     const applyCollapsed = () => {
         shell.classList.toggle('sidebar-collapsed', Boolean(state.collapsed));
@@ -48,8 +52,9 @@
 
     applyWidth();
     applyCollapsed();
+    window.addEventListener('resize', applyWidth);
 
-    toggle?.addEventListener('click', () => {
+    toggles.forEach((button) => button.addEventListener('click', () => {
         if (mobileQuery.matches) {
             shell.classList.toggle('sidebar-open');
         } else {
@@ -58,7 +63,7 @@
             save();
         }
         syncToggle();
-    });
+    }));
     backdrop?.addEventListener('click', () => {
         shell.classList.remove('sidebar-open');
         syncToggle();
@@ -90,7 +95,16 @@
             if (!dragging) {
                 return;
             }
-            state.width = clampWidth(event.clientX - shell.getBoundingClientRect().left);
+            const raw = event.clientX - shell.getBoundingClientRect().left;
+            if (raw < SNAP_TO_ICONS) {
+                dragging = false;
+                shell.classList.remove('sidebar-resizing');
+                state.collapsed = true;
+                applyCollapsed();
+                save();
+                return;
+            }
+            state.width = clampWidth(raw);
             applyWidth();
         });
         const stop = () => {
@@ -144,4 +158,19 @@
             save();
         });
     });
+
+    // Top bar date and 12-hour time, in the viewer's own time zone.
+    const clockDate = shell.querySelector('[data-topbar-date]');
+    const clockTime = shell.querySelector('[data-topbar-time]');
+    if (clockDate && clockTime) {
+        const dateFormat = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        const timeFormat = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const tick = () => {
+            const now = new Date();
+            clockDate.textContent = dateFormat.format(now);
+            clockTime.textContent = timeFormat.format(now);
+        };
+        tick();
+        window.setInterval(tick, 10_000);
+    }
 })();

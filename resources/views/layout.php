@@ -25,27 +25,32 @@ if (!$user['is_admin']) {
 }
 
 /** One sidebar destination: icon + label, with an optional pin toggle and expand button. */
-$navRow = static function (string $href, string $label, string $iconName, ?string $pinKey = null, ?string $treeId = null, bool $active = false) use ($icon, $navigation, $csrfToken, $currentUri): string {
+$navRow = static function (string $href, string $label, string $iconName, ?string $pinKey = null, ?string $treeId = null, bool $active = false, ?string $tileColor = null) use ($icon, $navigation, $csrfToken, $currentUri): string {
     $html = '<div class="nav-row">';
     $html .= '<a class="nav-link' . ($active ? ' active' : '') . '" href="' . e($href) . '" title="' . e($label) . '"' . ($active ? ' aria-current="page"' : '') . '>'
-        . $icon($iconName) . '<span class="nav-text">' . e($label) . '</span></a>';
+        . icon_tile($iconName, 'sm', $tileColor) . '<span class="nav-text">' . e($label) . '</span></a>';
     if ($treeId !== null) {
         $html .= '<button class="nav-expand" type="button" data-tree-toggle aria-expanded="true" aria-controls="' . e($treeId) . '" aria-label="Show or hide ' . e($label) . ' items">' . $icon('chevron') . '</button>';
     }
-    if ($pinKey !== null && $navigation !== null) {
+    if ($pinKey !== null && $navigation !== null && !in_array($pinKey, App\Services\NavigationService::FIXED_TOP_BAR, true)) {
         $pinned = in_array($pinKey, $navigation['pins'], true);
-        $action = $pinned ? 'Unpin ' . $label . ' from the top bar' : 'Pin ' . $label . ' to the top bar';
+        $full = !$pinned && count($navigation['pins']) >= App\Services\NavigationService::MAX_PINS;
+        $action = $pinned ? 'Unpin ' . $label . ' from the top bar' : ($full ? 'The top bar is full (5 apps). Unpin one first.' : 'Pin ' . $label . ' to the top bar');
         $html .= '<form class="nav-pin-form" method="post" action="/pins/toggle">'
             . '<input type="hidden" name="_token" value="' . e($csrfToken) . '">'
             . '<input type="hidden" name="key" value="' . e($pinKey) . '">'
             . '<input type="hidden" name="return" value="' . e($currentUri) . '">'
-            . '<button class="nav-pin' . ($pinned ? ' pinned' : '') . '" type="submit" title="' . e($action) . '" aria-label="' . e($action) . '" aria-pressed="' . ($pinned ? 'true' : 'false') . '">' . $icon('pin') . '</button>'
+            . '<button class="nav-pin' . ($pinned ? ' pinned' : '') . '" type="submit"' . ($full ? ' disabled' : '') . ' title="' . e($action) . '" aria-label="' . e($action) . '" aria-pressed="' . ($pinned ? 'true' : 'false') . '">' . $icon('pin') . '</button>'
             . '</form>';
     }
 
     return $html . '</div>';
 };
-$item = static function (string $key) use ($navigation, $navRow, $isActive): string {
+$isOn = static fn (string $key): bool => $navigation !== null && !in_array($key, $navigation['inactive'], true);
+$item = static function (string $key) use ($navigation, $navRow, $isActive, $isOn): string {
+    if (!$isOn($key)) {
+        return '';
+    }
     $entry = $navigation['items'][$key];
 
     return $navRow($entry['href'], $entry['label'], $entry['icon'], $key, null, $isActive($entry['href']));
@@ -53,21 +58,46 @@ $item = static function (string $key) use ($navigation, $navRow, $isActive): str
 ?>
     <div class="app-shell" data-app-shell>
         <header class="topbar">
-            <button class="topbar-toggle" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse or expand the sidebar" title="Toggle sidebar"><?= $icon('sidebar') ?></button>
-            <a class="brand topbar-brand" href="<?= $user['is_admin'] ? '/admin' : '/dashboard' ?>" aria-label="Garwin AI home"><span>Garwin</span><strong>AI</strong></a>
-            <?php if ($navigation !== null): ?>
-                <nav class="topbar-pins" aria-label="Pinned apps">
-                    <?php foreach ($navigation['pins'] as $pinKey): $pin = $navigation['items'][$pinKey]; $pinActive = $isActive($pin['href']); ?>
-                        <a class="topbar-pin <?= $pinActive ? 'active' : '' ?>" href="<?= e($pin['href']) ?>" title="<?= e($pin['label']) ?>" aria-label="<?= e($pin['label']) ?>" <?= $pinActive ? 'aria-current="page"' : '' ?>><?= $icon($pin['icon']) ?></a>
-                    <?php endforeach; ?>
+            <button class="topbar-toggle topbar-menu" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open the menu" title="Menu"><?= $icon('sidebar') ?></button>
+            <?php if ($navigation !== null): $newMessages = (int) $navigation['messageCounts']['new']; $topLink = static function (string $href, string $label, string $iconName, bool $active = false, string $extra = '') use ($icon): string {
+                return '<a class="topbar-pin' . ($active ? ' active' : '') . '" href="' . e($href) . '" title="' . e($label) . '" aria-label="' . e($label) . '"' . ($active ? ' aria-current="page"' : '') . '>' . $icon($iconName) . $extra . '</a>';
+            }; ?>
+                <nav class="topbar-fixed" aria-label="Quick access">
+                    <?= $topLink('/profile', 'View profile', 'eye', $isActive('/profile')) ?>
+                    <?php if ($isOn('messenger')): ?><?= $topLink('/messenger', 'Messenger' . ($newMessages > 0 ? " ({$newMessages} new)" : ''), 'mail-new', $isActive('/messenger'), $newMessages > 0 ? '<span class="topbar-badge">' . min($newMessages, 99) . '</span>' : '') ?><?php endif; ?>
+                    <details class="topbar-menu-popover">
+                        <summary class="topbar-pin" title="Notifications" aria-label="Notifications"><?= $icon('bell') ?></summary>
+                        <div class="topbar-popover-panel" role="dialog" aria-label="Notifications">
+                            <strong>Notifications</strong>
+                            <p>You're all caught up.</p>
+                        </div>
+                    </details>
+                    <?= $topLink('mailto:' . $supportEmail, 'Contact support', 'headset') ?>
+                    <?php if ($isOn('calendar')): ?><?= $topLink('/calendar', 'Calendar', 'calendar', $isActive('/calendar')) ?><?php endif; ?>
+                    <?php if ($isOn('assistant')): ?><?= $topLink('/assistant', 'AI Assistant', 'robot', $isActive('/assistant')) ?><?php endif; ?>
                 </nav>
+                <div class="topbar-datetime" data-topbar-clock aria-live="off"><span data-topbar-date></span><span class="topbar-time" data-topbar-time></span></div>
+                <div class="topbar-right">
+                    <nav class="topbar-pins" aria-label="Pinned apps">
+                        <?php foreach ($navigation['pins'] as $pinKey): $pin = $navigation['items'][$pinKey]; ?>
+                            <?= $topLink($pin['href'], $pin['label'], $pin['icon'], $isActive($pin['href'])) ?>
+                        <?php endforeach; ?>
+                    </nav>
+                    <span class="topbar-divider" aria-hidden="true"></span>
+                    <?= $topLink('/help', 'Help', 'help', $isActive('/help')) ?>
+                    <?= $topLink('/settings', 'Settings', 'gear', $isActive('/settings')) ?>
+                </div>
             <?php else: ?>
                 <span class="topbar-note">Super Admin</span>
+                <a class="support-link" href="mailto:<?= e($supportEmail) ?>">Help &amp; support</a>
             <?php endif; ?>
-            <a class="support-link" href="mailto:<?= e($supportEmail) ?>">Help &amp; support</a>
         </header>
 
         <aside class="sidebar" id="app-sidebar" aria-label="Main navigation">
+            <div class="sidebar-head">
+                <a class="brand sidebar-brand" href="<?= $user['is_admin'] ? '/admin' : '/dashboard' ?>" aria-label="Garwin AI home"><span>Garwin</span><strong>AI</strong></a>
+                <button class="sidebar-toggle" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse the sidebar to icons" title="Collapse to icons"><?= $icon('sidebar') ?></button>
+            </div>
             <nav class="sidebar-nav">
                 <?php if ($navigation === null): ?>
                     <div class="nav-group" data-nav-group="administration">
@@ -85,22 +115,26 @@ $item = static function (string $key) use ($navigation, $navRow, $isActive): str
                         <div class="nav-group-items">
                             <?= $item('dashboard') ?>
                             <?= $item('assistant') ?>
+                            <?php if ($isOn('storage')): ?>
                             <div class="nav-tree" data-nav-tree="storage">
                                 <?= $navRow('/storage', 'Storage', 'storage', 'storage', 'nav-storage-items', $isActive('/storage')) ?>
                                 <div class="nav-children" id="nav-storage-items">
-                                    <a class="nav-sublink" href="/storage" title="<?= e($navigation['driveLabel']) ?>"><?= $icon('drive') ?><span class="nav-text"><?= e($navigation['driveLabel']) ?></span></a>
+                                    <a class="nav-sublink" href="/storage" title="<?= e($navigation['driveLabel']) ?>"><?= icon_tile('drive', 'xs') ?><span class="nav-text"><?= e($navigation['driveLabel']) ?></span></a>
                                 </div>
                             </div>
+                            <?php endif; ?>
                             <?= $item('calendar') ?>
+                            <?php if ($isOn('messenger')): ?>
                             <div class="nav-tree" data-nav-tree="messenger">
                                 <?= $navRow('/messenger', 'Messenger', 'messenger', 'messenger', 'nav-messenger-items', false) ?>
                                 <div class="nav-children" id="nav-messenger-items">
                                     <?php foreach (['new' => ['New', 'mail-new'], 'read' => ['Read', 'mail-read'], 'priority' => ['Priority', 'priority']] as $viewKey => [$viewLabel, $viewIcon]): $subActive = $currentPath === '/messenger' && $currentView === $viewKey; ?>
-                                        <a class="nav-sublink <?= $subActive ? 'active' : '' ?>" href="/messenger?view=<?= $viewKey ?>" <?= $subActive ? 'aria-current="page"' : '' ?>><?= $icon($viewIcon) ?><span class="nav-text"><?= $viewLabel ?></span><span class="nav-count <?= $viewKey === 'new' && $counts['new'] > 0 ? 'highlight' : '' ?>"><?= $counts[$viewKey] ?></span></a>
+                                        <a class="nav-sublink <?= $subActive ? 'active' : '' ?>" href="/messenger?view=<?= $viewKey ?>" <?= $subActive ? 'aria-current="page"' : '' ?>><?= icon_tile($viewIcon, 'xs') ?><span class="nav-text"><?= $viewLabel ?></span><span class="nav-count <?= $viewKey === 'new' && $counts['new'] > 0 ? 'highlight' : '' ?>"><?= $counts[$viewKey] ?></span></a>
                                     <?php endforeach; ?>
-                                    <a class="nav-sublink <?= $currentPath === '/messenger/compose' ? 'active' : '' ?>" href="/messenger/compose"><?= $icon('compose') ?><span class="nav-text">Compose New Message</span></a>
+                                    <a class="nav-sublink <?= $currentPath === '/messenger/compose' ? 'active' : '' ?>" href="/messenger/compose"><?= icon_tile('compose', 'xs') ?><span class="nav-text">Compose New Message</span></a>
                                 </div>
                             </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="nav-group" data-nav-group="apps">
@@ -115,6 +149,27 @@ $item = static function (string $key) use ($navigation, $navRow, $isActive): str
                             <?php endforeach; ?>
                         </div>
                     </div>
+                    <div class="nav-group" data-nav-group="pages">
+                        <button class="nav-section-toggle" type="button" data-group-toggle aria-expanded="true"><span>Pages</span><?= $icon('chevron') ?></button>
+                        <div class="nav-group-items">
+                            <?php foreach ($navigation['pages'] as $navPage): $navPageActive = $currentPath === '/pages/view' && (int) ($_GET['id'] ?? 0) === $navPage['id']; ?>
+                                <?= $navRow('/pages/view?id=' . $navPage['id'], $navPage['title'], App\Services\WorkspacePageService::TYPES[$navPage['page_type']]['icon'] ?? 'pages', null, null, $navPageActive) ?>
+                            <?php endforeach; ?>
+                            <?php if ($navigation['pages'] === []): ?>
+                                <p class="nav-empty">No pages yet. Add one from the <?= $icon('more') ?> Pages menu.</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php if ($navigation['menuLinks'] !== []): ?>
+                        <div class="nav-group" data-nav-group="links">
+                            <button class="nav-section-toggle" type="button" data-group-toggle aria-expanded="true"><span>Links</span><?= $icon('chevron') ?></button>
+                            <div class="nav-group-items">
+                                <?php foreach ($navigation['menuLinks'] as $menuLink): $external = !str_starts_with($menuLink['url'], '/'); ?>
+                                    <div class="nav-row"><a class="nav-link" href="<?= e($menuLink['url']) ?>" title="<?= e($menuLink['label']) ?>"<?= $external ? ' target="_blank" rel="noopener noreferrer"' : '' ?>><?= icon_tile($menuLink['icon'], 'sm', $menuLink['color']) ?><span class="nav-text"><?= e($menuLink['label']) ?></span></a></div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     <div class="nav-standalone">
                         <?= $item('appzone') ?>
                     </div>
@@ -141,7 +196,8 @@ $item = static function (string $key) use ($navigation, $navRow, $isActive): str
         <div class="sidebar-backdrop" data-sidebar-backdrop></div>
 
         <main class="main-content">
-            <div class="workspace"><?= $content ?></div>
+            <?php $shellFlash = isset($flashMessage) ? null : take_flash_message(); ?>
+            <div class="workspace"><?php if ($shellFlash !== null): ?><div class="admin-alert <?= e($shellFlash['type']) ?>" role="status"><?= e($shellFlash['message']) ?></div><?php endif; ?><?= $content ?></div>
         </main>
     </div>
 <?php else: ?>
